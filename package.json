@@ -1,0 +1,41 @@
+{
+  "name": "context-commit",
+  "version": "0.1.0",
+  "description": "Turn meaningful AI work sessions into reusable context that compounds over time.",
+  "type": "module",
+  "bin": {
+    "context-commit": "./bin/context-commit.mjs",
+    "ctxc": "./bin/context-commit.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check bin/context-commit.mjs && node --check src/core.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "memory",
+    "context",
+    "prompt",
+    "codex",
+    "claude-code"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/junghoonwoo-stack/context-commit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/junghoonwoo-stack/context-commit/issues"
+  },
+  "homepage": "https://github.com/junghoonwoo-stack/context-commit#readme",
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "README.md"
+  ]
+}

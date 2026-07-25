@@ -1,0 +1,6 @@
+.context-commit/runtime/
+.context-commit/current.json
+.context-commit/CURRENT_CONTEXT.md
+.context-commit/SESSION.md
+node_modules/
+*.tgz
