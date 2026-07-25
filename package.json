@@ -1,6 +1,6 @@
 {
   "name": "context-commit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Turn meaningful AI work sessions into reusable context that compounds over time.",
   "type": "module",
   "bin": {
