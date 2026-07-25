@@ -20,6 +20,8 @@ started_at: "2026-07-25T01:40:00.000Z"
 ended_at: "2026-07-25T01:42:18.000Z"
 fresh_until: "2026-10-23T01:42:18.000Z"
 workspace: "customer-care"
+team: "customer-care"
+member: "alex"
 goal: "Improve the customer onboarding proposal"
 summary: "Reframed onboarding around setup anxiety"
 artifacts:

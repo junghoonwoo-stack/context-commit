@@ -104,6 +104,48 @@ Agent session
 This is **Context Compounding**: context created by one unit of work makes the
 next unit easier and more specific.
 
+## Use it as an organization
+
+Keep the visible `context-memory/` folder as each person's local, durable
+memory. Add one shared folder to turn useful Prompt Commits into an
+organizational asset:
+
+```bash
+context-commit init \
+  --agent codex \
+  --shared-memory-dir "/path/to/company-context" \
+  --team "customer-care" \
+  --member "alex"
+```
+
+The shared path can be:
+
+- a locally synchronized SharePoint document library
+- a mounted network drive
+- a checked-out private Git repository
+
+At the end of a session, ContextCommit saves locally first and then copies the
+Prompt Commit to the shared memory. If the shared location is temporarily
+unavailable, the local commit remains safe. Retry later with:
+
+```bash
+context-commit sync
+```
+
+The next `start` reads relevant commits from both local and shared memory.
+Another team member can therefore start with context produced in someone
+else's Agent session. Shared retrieval is scoped to the configured `--team`;
+use a common team name only when the same access boundary should apply.
+
+For company-wide use, start with a dedicated SharePoint document library when
+the organization already relies on Microsoft 365 permissions, retention, and
+compliance. Use a private Git repository for engineering-heavy teams that want
+reviewable history and pull requests. A network drive is useful for a quick
+pilot but provides weaker versioning and governance.
+
+See [Organization memory](docs/ORGANIZATION_MEMORY.md) for the recommended
+layout and rollout path.
+
 ## Agent-native by design
 
 ContextCommit is not another AI Agent.
@@ -129,11 +171,14 @@ ContextCommit handles the deterministic parts:
 ## Commands
 
 ```text
-context-commit init [--memory-dir PATH] [--agent generic|codex|claude|all]
+context-commit init [--memory-dir PATH] [--shared-memory-dir PATH]
+                    [--team NAME] [--member NAME]
+                    [--agent generic|codex|claude|all]
 context-commit start [--goal "Current task"]
 context-commit note [--type TYPE] "Meaningful context"
 context-commit end [--summary "Outcome"] [--reuse-when "When useful"]
 context-commit context [--goal "Current task"]
+context-commit sync [--force]
 context-commit status
 context-commit abandon --yes
 ```
@@ -173,7 +218,7 @@ before sharing or syncing them.
 
 ## Current scope
 
-Version `0.1.0` supports:
+Version `0.2.0` supports:
 
 - local-first Markdown memory
 - working-directory snapshots
@@ -182,13 +227,16 @@ Version `0.1.0` supports:
 - goal-aware retrieval with a lightweight local relevance score
 - Codex and Claude Code instruction adapters
 - configurable memory paths
+- shared organization memory through filesystem-compatible storage
+- automatic local-first sync and cross-workspace retrieval
 
 Planned:
 
 - OpenClaw and Hermes adapters
 - richer semantic diffs for non-code work
 - approval and freshness workflows
-- team sync with permissions, audit, and retention controls
+- native SharePoint and Git adapters
+- permission-aware retrieval, approval, audit, and retention controls
 
 ## Development
 

@@ -1,5 +1,6 @@
 import {
   access,
+  copyFile,
   mkdir,
   readFile,
   readdir,
@@ -19,6 +20,9 @@ const FORMAT_VERSION = "context-commit/v1";
 const DEFAULT_CONFIG = {
   version: 1,
   memoryDir: "context-memory",
+  sharedMemoryDir: null,
+  team: "default",
+  member: null,
   recentCommits: 5,
   maxFileBytes: 262144,
   maxFiles: 1000,
@@ -51,6 +55,8 @@ export async function runCli(argv, io = console) {
       return endSession(options, io);
     case "context":
       return refreshContext(options, io);
+    case "sync":
+      return syncSharedMemory(options, io);
     case "status":
       return showStatus(io);
     case "abandon":
@@ -63,7 +69,7 @@ export async function runCli(argv, io = console) {
     case "version":
     case "--version":
     case "-v":
-      io.log("0.1.0");
+      io.log("0.2.0");
       return;
     default:
       throw new Error(`Unknown command "${command}". Run "context-commit help".`);
@@ -77,6 +83,9 @@ async function initWorkspace(options, io) {
   const config = {
     ...DEFAULT_CONFIG,
     memoryDir: options["memory-dir"] || DEFAULT_CONFIG.memoryDir,
+    sharedMemoryDir: options["shared-memory-dir"] || null,
+    team: options.team || DEFAULT_CONFIG.team,
+    member: options.member || process.env.USER || process.env.USERNAME || null,
     agent: options.agent || DEFAULT_CONFIG.agent,
   };
 
@@ -87,18 +96,32 @@ async function initWorkspace(options, io) {
     const previous = JSON.parse(await readFile(configPath, "utf8"));
     Object.assign(config, previous, {
       memoryDir: options["memory-dir"] || previous.memoryDir,
+      sharedMemoryDir:
+        options["shared-memory-dir"] || previous.sharedMemoryDir || null,
+      team: options.team || previous.team || DEFAULT_CONFIG.team,
+      member: options.member || previous.member || config.member,
       agent: options.agent || previous.agent,
     });
   }
 
   await writeJson(configPath, config);
   await ensureIndex(root, config);
+  if (config.sharedMemoryDir) {
+    await ensureMemoryIndex(resolveSharedMemoryDir(root, config));
+  }
   await writeAgentProtocol(root);
   await installAgentAdapter(root, config.agent);
   await ensureGitignore(root);
 
   io.log(`ContextCommit initialized in ${root}`);
   io.log(`Memory: ${resolveMemoryDir(root, config)}`);
+  io.log(
+    `Shared memory: ${
+      config.sharedMemoryDir
+        ? resolveSharedMemoryDir(root, config)
+        : "not configured"
+    }`,
+  );
   io.log(`Agent adapter: ${config.agent}`);
   io.log("\nNext: context-commit start --goal \"What you are working on\"");
 }
@@ -236,9 +259,21 @@ async function endSession(options, io) {
     freshDays,
     changes,
     root,
+    team: config.team,
+    member: config.member,
   });
   await writeFile(commitPath, markdown);
   await updateIndex(root, config);
+  let sharedResult = null;
+  if (config.sharedMemoryDir) {
+    try {
+      sharedResult = await syncOneCommit(root, config, commitPath);
+    } catch (error) {
+      io.warn(
+        `Shared memory unavailable; local Prompt Commit is safe. Run "context-commit sync" later. ${error.message}`,
+      );
+    }
+  }
 
   await rm(path.join(metaDir, "runtime", session.id), {
     recursive: true,
@@ -248,6 +283,9 @@ async function endSession(options, io) {
   await rm(path.join(metaDir, SESSION_FILE), { force: true });
 
   io.log(`Prompt Commit saved: ${commitPath}`);
+  if (sharedResult?.copied) {
+    io.log(`Shared Prompt Commit: ${sharedResult.destination}`);
+  }
   io.log(
     `Outcome Diff: ${changes.filter((change) => change.kind !== "unchanged").length} changed artifacts`,
   );
@@ -266,6 +304,27 @@ async function refreshContext(options, io) {
   return contextPath;
 }
 
+async function syncSharedMemory(options, io) {
+  const { root, config } = await loadWorkspace();
+  if (!config.sharedMemoryDir) {
+    throw new Error(
+      'Shared memory is not configured. Re-run "context-commit init --shared-memory-dir <PATH>".',
+    );
+  }
+
+  const localFiles = await listMemoryFiles(resolveMemoryDir(root, config));
+  let copied = 0;
+  for (const file of localFiles) {
+    const result = await syncOneCommit(root, config, file, {
+      force: Boolean(options.force),
+    });
+    if (result.copied) copied += 1;
+  }
+  io.log(`Shared memory synchronized: ${copied} new Prompt Commits`);
+  io.log(`Shared memory: ${resolveSharedMemoryDir(root, config)}`);
+  return copied;
+}
+
 async function showStatus(io) {
   const { root, config, metaDir } = await loadWorkspace();
   const currentPath = path.join(metaDir, CURRENT_FILE);
@@ -274,6 +333,16 @@ async function showStatus(io) {
   io.log(`Workspace: ${root}`);
   io.log(`Memory: ${resolveMemoryDir(root, config)}`);
   io.log(`Prompt Commits: ${memoryFiles.length}`);
+  if (config.sharedMemoryDir) {
+    const sharedDir = resolveSharedMemoryDir(root, config);
+    const sharedFiles = await listMemoryFiles(resolveSharedReadDir(root, config));
+    io.log(`Shared memory: ${sharedDir}`);
+    io.log(`Shared Prompt Commits: ${sharedFiles.length}`);
+    io.log(`Team: ${config.team}`);
+    io.log(`Member: ${config.member || "(not set)"}`);
+  } else {
+    io.log("Shared memory: not configured");
+  }
   if (await exists(currentPath)) {
     const session = JSON.parse(await readFile(currentPath, "utf8"));
     io.log(`Active session: ${session.id}`);
@@ -336,6 +405,9 @@ async function findWorkspace(start) {
 async function collectWorkspaceFiles(root, config) {
   const results = [];
   const memoryDir = resolveMemoryDir(root, config);
+  const sharedMemoryDir = config.sharedMemoryDir
+    ? resolveSharedMemoryDir(root, config)
+    : null;
 
   async function walk(directory) {
     if (results.length >= config.maxFiles) return;
@@ -343,7 +415,14 @@ async function collectWorkspaceFiles(root, config) {
     for (const entry of entries) {
       if (results.length >= config.maxFiles) return;
       const absolute = path.join(directory, entry.name);
-      if (isWithin(absolute, memoryDir)) continue;
+      if (isWithin(memoryDir, root) && isWithin(absolute, memoryDir)) continue;
+      if (
+        sharedMemoryDir &&
+        isWithin(sharedMemoryDir, root) &&
+        isWithin(absolute, sharedMemoryDir)
+      ) {
+        continue;
+      }
       if (entry.isDirectory()) {
         if (!IGNORED_NAMES.has(entry.name)) await walk(absolute);
         continue;
@@ -455,6 +534,8 @@ function renderPromptCommit({
   freshDays,
   changes,
   root,
+  team,
+  member,
 }) {
   const grouped = groupNotes(session.notes);
   const artifacts = changes.map((change) => change.path);
@@ -489,6 +570,8 @@ started_at: ${yamlString(session.startedAt)}
 ended_at: ${yamlString(endedAt.toISOString())}
 fresh_until: ${yamlString(freshUntil.toISOString())}
 workspace: ${yamlString(path.basename(root))}
+team: ${yamlString(team || "default")}
+member: ${yamlString(member || "")}
 goal: ${yamlString(session.goal || "")}
 summary: ${yamlString(summary)}
 artifacts:
@@ -558,12 +641,32 @@ function renderNotes(notes) {
 
 async function buildCurrentContext(root, config, goal) {
   const memoryDir = resolveMemoryDir(root, config);
-  const files = await listMemoryFiles(memoryDir);
+  const sources = [
+    { label: "local", dir: memoryDir },
+  ];
+  if (config.sharedMemoryDir) {
+    sources.push({
+      label: "shared",
+      dir: resolveSharedReadDir(root, config),
+    });
+  }
+  const candidates = [];
+  for (const source of sources) {
+    for (const file of await listMemoryFiles(source.dir)) {
+      candidates.push({ ...source, file });
+    }
+  }
   const ranked = [];
-  for (const file of files) {
-    const content = await readFile(file, "utf8");
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const content = await readFile(candidate.file, "utf8");
+    const id =
+      content.match(/^id:\s*(.+)$/m)?.[1]?.replace(/^["']|["']$/g, "") ||
+      sha256(content);
+    if (seen.has(id)) continue;
+    seen.add(id);
     ranked.push({
-      file,
+      ...candidate,
       content,
       score: relevanceScore(content, goal),
     });
@@ -576,8 +679,8 @@ async function buildCurrentContext(root, config, goal) {
       ? "No Prompt Commits yet. Complete a session to begin compounding context."
       : selected
           .map((item) => {
-            const relative = toPosix(path.relative(memoryDir, item.file));
-            return `## Source: ${relative}\n\n${trimContent(item.content, 12000)}`;
+            const relative = toPosix(path.relative(item.dir, item.file));
+            return `## Source: ${item.label}:${relative}\n\n${trimContent(item.content, 12000)}`;
           })
           .join("\n\n---\n\n");
   const markdown = `# Current Context
@@ -632,7 +735,12 @@ async function listMemoryFiles(memoryDir) {
 }
 
 async function ensureIndex(root, config) {
-  const indexPath = path.join(resolveMemoryDir(root, config), "INDEX.md");
+  await ensureMemoryIndex(resolveMemoryDir(root, config));
+}
+
+async function ensureMemoryIndex(memoryDir) {
+  const indexPath = path.join(memoryDir, "INDEX.md");
+  await mkdir(memoryDir, { recursive: true });
   if (!(await exists(indexPath))) {
     await writeFile(
       indexPath,
@@ -643,6 +751,10 @@ async function ensureIndex(root, config) {
 
 async function updateIndex(root, config) {
   const memoryDir = resolveMemoryDir(root, config);
+  await updateMemoryIndex(memoryDir);
+}
+
+async function updateMemoryIndex(memoryDir) {
   const files = (await listMemoryFiles(memoryDir)).slice(0, 100);
   const rows = [];
   for (const file of files) {
@@ -657,6 +769,42 @@ async function updateIndex(root, config) {
     path.join(memoryDir, "INDEX.md"),
     `# ContextCommit Memory\n\n${rows.join("\n") || "No Prompt Commits yet."}\n`,
   );
+}
+
+async function syncOneCommit(
+  root,
+  config,
+  commitPath,
+  { force = false } = {},
+) {
+  const sharedRoot = resolveSharedMemoryDir(root, config);
+  const content = await readFile(commitPath, "utf8");
+  const id =
+    content.match(/^id:\s*(.+)$/m)?.[1]?.replace(/^["']|["']$/g, "") ||
+    path.basename(commitPath, ".md");
+  const date =
+    content.match(/^ended_at:\s*["']?(\d{4}-\d{2}-\d{2})/m)?.[1] ||
+    localDate(new Date());
+  const workspace =
+    content.match(/^workspace:\s*(.+)$/m)?.[1]?.replace(/^["']|["']$/g, "") ||
+    path.basename(root);
+  const team = slugify(config.team || "default");
+  const member = slugify(config.member || "unknown");
+  const destination = path.join(
+    sharedRoot,
+    "commits",
+    team,
+    slugify(workspace),
+    date,
+    `${member}-${slugify(id)}-${path.basename(commitPath)}`,
+  );
+
+  if (!force && (await exists(destination))) {
+    return { copied: false, destination };
+  }
+  await mkdir(path.dirname(destination), { recursive: true });
+  await copyFile(commitPath, destination);
+  return { copied: true, destination };
 }
 
 async function writeAgentProtocol(root) {
@@ -872,6 +1020,21 @@ function resolveMemoryDir(root, config) {
     : path.resolve(root, config.memoryDir);
 }
 
+function resolveSharedMemoryDir(root, config) {
+  if (!config.sharedMemoryDir) return null;
+  return path.isAbsolute(config.sharedMemoryDir)
+    ? config.sharedMemoryDir
+    : path.resolve(root, config.sharedMemoryDir);
+}
+
+function resolveSharedReadDir(root, config) {
+  return path.join(
+    resolveSharedMemoryDir(root, config),
+    "commits",
+    slugify(config.team || "default"),
+  );
+}
+
 function parseArgs(args) {
   const result = { _: [] };
   for (let index = 0; index < args.length; index += 1) {
@@ -990,11 +1153,14 @@ function helpText() {
   return `ContextCommit — make AI work compound over time
 
 Usage:
-  context-commit init [--memory-dir PATH] [--agent generic|codex|claude|all]
+  context-commit init [--memory-dir PATH] [--shared-memory-dir PATH]
+                      [--team NAME] [--member NAME]
+                      [--agent generic|codex|claude|all]
   context-commit start [--goal "Current task"]
   context-commit note [--type TYPE] "Meaningful context"
   context-commit end [--summary "Outcome"] [--reuse-when "When useful"]
   context-commit context [--goal "Current task"]
+  context-commit sync [--force]
   context-commit status
   context-commit abandon --yes
 

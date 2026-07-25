@@ -133,3 +133,104 @@ test("redacts common inline secrets from notes", async () => {
   assert.match(commit, /api_key=\[REDACTED\]/);
   assert.doesNotMatch(commit, /super-secret-value/);
 });
+
+test("shares Prompt Commits across workspaces through organization memory", async () => {
+  const sharedMemory = await mkdtemp(
+    path.join(tmpdir(), "context-commit-shared-"),
+  );
+  const firstWorkspace = await mkdtemp(
+    path.join(tmpdir(), "context-commit-team-a-"),
+  );
+  const secondWorkspace = await mkdtemp(
+    path.join(tmpdir(), "context-commit-team-b-"),
+  );
+
+  run(firstWorkspace, [
+    "init",
+    "--shared-memory-dir",
+    sharedMemory,
+    "--team",
+    "care-team",
+    "--member",
+    "alex",
+  ]);
+  run(firstWorkspace, [
+    "start",
+    "--goal",
+    "Define the clinic onboarding policy",
+  ]);
+  run(firstWorkspace, [
+    "note",
+    "--type",
+    "decision",
+    "Use a physician review before external reports are imported.",
+  ]);
+  const endOutput = run(firstWorkspace, [
+    "end",
+    "--summary",
+    "Defined clinic onboarding policy",
+  ]);
+  assert.match(endOutput, /Shared Prompt Commit/);
+
+  const sharedFiles = await findMarkdownFiles(sharedMemory);
+  const sharedCommitPath = sharedFiles.find(
+    (file) => path.basename(file) !== "INDEX.md",
+  );
+  assert.ok(sharedCommitPath);
+  const sharedCommit = await readFile(sharedCommitPath, "utf8");
+  assert.match(sharedCommit, /team: "care-team"/);
+  assert.match(sharedCommit, /member: "alex"/);
+  assert.match(sharedCommit, /Use a physician review/);
+
+  run(secondWorkspace, [
+    "init",
+    "--shared-memory-dir",
+    sharedMemory,
+    "--team",
+    "care-team",
+    "--member",
+    "sam",
+  ]);
+  run(secondWorkspace, [
+    "start",
+    "--goal",
+    "Plan clinic onboarding",
+  ]);
+  const context = await readFile(
+    path.join(secondWorkspace, ".context-commit", "CURRENT_CONTEXT.md"),
+    "utf8",
+  );
+  assert.match(context, /Source: shared:/);
+  assert.match(context, /Defined clinic onboarding policy/);
+  assert.match(context, /Use a physician review/);
+
+  const otherTeamWorkspace = await mkdtemp(
+    path.join(tmpdir(), "context-commit-other-team-"),
+  );
+  run(otherTeamWorkspace, [
+    "init",
+    "--shared-memory-dir",
+    sharedMemory,
+    "--team",
+    "finance-team",
+  ]);
+  run(otherTeamWorkspace, ["start", "--goal", "Plan clinic onboarding"]);
+  const otherTeamContext = await readFile(
+    path.join(otherTeamWorkspace, ".context-commit", "CURRENT_CONTEXT.md"),
+    "utf8",
+  );
+  assert.doesNotMatch(otherTeamContext, /Defined clinic onboarding policy/);
+});
+
+async function findMarkdownFiles(root) {
+  const results = [];
+  async function walk(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) await walk(absolute);
+      if (entry.isFile() && entry.name.endsWith(".md")) results.push(absolute);
+    }
+  }
+  await walk(root);
+  return results;
+}
