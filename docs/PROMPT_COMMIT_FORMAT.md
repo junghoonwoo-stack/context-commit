@@ -28,18 +28,20 @@ id: "2026-07-25T104218-abc12"
 started_at: "2026-07-25T01:40:00.000Z"
 ended_at: "2026-07-25T01:42:18.000Z"
 fresh_until: "2026-10-23T01:42:18.000Z"
-workspace: "customer-care"
+workspace: "billing-service"
 scope: "team"
-team: "customer-care"
+team: "payments"
 member: "alex"
-goal: "Improve the customer onboarding proposal"
-summary: "Reframed onboarding around setup anxiety"
-reuse_when: "Creating subscription onboarding materials"
+goal: "Fix duplicate payment webhook processing"
+summary: "Made payment webhooks idempotent by event ID"
+reuse_when: "Implementing or reviewing payment webhook handlers"
 topics:
-  - "customer-onboarding"
-  - "subscription-care"
+  - "payments"
+  - "webhooks"
+  - "idempotency"
 entities:
-  - "Care+ Pilot"
+  - "payment event ID"
+  - "invoice record"
 context_types:
   - "context"
   - "decision"
@@ -47,7 +49,8 @@ sensitivity: "internal"
 confidence: "confirmed"
 status: "active"
 artifacts:
-  - "proposal.md"
+  - "src/webhooks/payment-handler.ts"
+  - "test/webhooks/payment-handler.test.ts"
 ---
 ```
 
@@ -74,8 +77,8 @@ sharing. Unknown values should be left empty rather than guessed.
 - `goal`: the task at session start.
 - `summary`: one plain-language sentence describing the outcome.
 - `reuse_when`: a concrete future situation in which retrieval is useful.
-- `topics`: one to five stable, specific nouns. Prefer `customer-onboarding`
-  over generic tags such as `work`, `document`, or `AI`.
+- `topics`: one to five stable, specific nouns. Prefer `webhook-idempotency`
+  over generic tags such as `work`, `code`, `document`, or `AI`.
 - `entities`: exact names of products, projects, customers, systems, policies,
   or regulations. Do not use broad categories.
 - `context_types`: derived from captured sections, such as `decision`,
