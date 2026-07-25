@@ -63,8 +63,9 @@ Agents retrieve shared commits only from their configured `team`. Use separate
 shared roots or storage permissions for hard access boundaries; the `team`
 field is a retrieval namespace, not a security control.
 
-The Prompt Commit frontmatter also records `team`, `member`, `workspace`, and
-session timestamps so the same files remain understandable across tools.
+The Prompt Commit frontmatter also records `scope`, `team`, `member`,
+`workspace`, topics, entities, sensitivity, confidence, freshness, and status
+so the same files remain understandable and searchable across tools.
 
 ## Setup
 
@@ -82,6 +83,9 @@ context-commit init --shared "Z:\Company Context"
 ```
 
 ContextCommit creates the shared structure and uses the default team namespace.
+Shared Prompt Commits default to `scope: team` and `sensitivity: internal`.
+These labels guide retrieval and review; they do not replace storage
+permissions.
 For separate team namespaces and explicit member names:
 
 ```bash
@@ -98,14 +102,22 @@ Prompt Commits:
 context-commit sync
 ```
 
+Initialization also installs project lifecycle hooks. Each participant should
+review and trust them in the Agent's `/hooks` browser, then verify:
+
+```bash
+context-commit hooks status
+```
+
 ## Governance before broad rollout
 
-1. Define which context classifications may be shared.
+1. Define which sensitivity classifications may be shared.
 2. Create domain-level access groups; avoid one company-wide read group.
 3. Require the Agent to exclude credentials, personal data, and raw
    conversations.
-4. Assign owners for stale, conflicting, or incorrect Prompt Commits.
-5. Set freshness and retention rules.
+4. Assign owners for stale, superseded, conflicting, or incorrect Prompt
+   Commits.
+5. Set freshness, status, and retention rules.
 6. Pilot with one team and review commits before scaling.
 
 Filesystem sharing is the current transport. Storage permissions remain the
