@@ -64,29 +64,31 @@ shared roots or storage permissions for hard access boundaries; the `team`
 field is a retrieval namespace, not a security control.
 
 The Prompt Commit frontmatter also records `team`, `member`, `workspace`, and
-session timestamps so that a later hosted service can index the same files
-without changing the format.
+session timestamps so the same files remain understandable across tools.
 
 ## Setup
 
-Point every participant at the same locally available folder:
+For a first test, point every participant at the same locally available folder.
+The path alone is enough:
+
+```bash
+context-commit init --shared "/mounted/company-context"
+```
+
+On Windows:
+
+```powershell
+context-commit init --shared "Z:\Company Context"
+```
+
+ContextCommit creates the shared structure and uses the default team namespace.
+For separate team namespaces and explicit member names:
 
 ```bash
 context-commit init \
-  --shared-memory-dir "/mounted/company-context" \
+  --shared "/mounted/company-context" \
   --team "customer-care" \
-  --member "alex" \
-  --agent codex
-```
-
-On Windows with a synchronized SharePoint library:
-
-```powershell
-context-commit init `
-  --shared-memory-dir "C:\Company\Context Memory" `
-  --team "customer-care" `
-  --member "alex" `
-  --agent codex
+  --member "alex"
 ```
 
 Normal session completion publishes automatically. To retry or backfill local
@@ -106,6 +108,6 @@ context-commit sync
 5. Set freshness and retention rules.
 6. Pilot with one team and review commits before scaling.
 
-Filesystem sharing is the MVP transport. Native SharePoint and Git adapters
-can later add approval workflows, remote sync, identity, audit, and
-permission-aware retrieval without changing the Markdown contract.
+Filesystem sharing is the current transport. Storage permissions remain the
+security boundary; ContextCommit keeps the Markdown contract independent of
+the selected shared folder.

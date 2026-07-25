@@ -27,7 +27,7 @@ const DEFAULT_CONFIG = {
   maxFileBytes: 262144,
   maxFiles: 1000,
   freshDays: 90,
-  agent: "generic",
+  agent: "all",
 };
 const IGNORED_NAMES = new Set([
   ".git",
@@ -69,7 +69,7 @@ export async function runCli(argv, io = console) {
     case "version":
     case "--version":
     case "-v":
-      io.log("0.2.0");
+      io.log("0.3.0");
       return;
     default:
       throw new Error(`Unknown command "${command}". Run "context-commit help".`);
@@ -80,10 +80,12 @@ async function initWorkspace(options, io) {
   const root = path.resolve(options.dir || process.cwd());
   const metaDir = path.join(root, META_DIR);
   const configPath = path.join(metaDir, CONFIG_FILE);
+  const requestedSharedMemory =
+    options["shared-memory-dir"] || options.shared || null;
   const config = {
     ...DEFAULT_CONFIG,
     memoryDir: options["memory-dir"] || DEFAULT_CONFIG.memoryDir,
-    sharedMemoryDir: options["shared-memory-dir"] || null,
+    sharedMemoryDir: requestedSharedMemory,
     team: options.team || DEFAULT_CONFIG.team,
     member: options.member || process.env.USER || process.env.USERNAME || null,
     agent: options.agent || DEFAULT_CONFIG.agent,
@@ -97,7 +99,7 @@ async function initWorkspace(options, io) {
     Object.assign(config, previous, {
       memoryDir: options["memory-dir"] || previous.memoryDir,
       sharedMemoryDir:
-        options["shared-memory-dir"] || previous.sharedMemoryDir || null,
+        requestedSharedMemory || previous.sharedMemoryDir || null,
       team: options.team || previous.team || DEFAULT_CONFIG.team,
       member: options.member || previous.member || config.member,
       agent: options.agent || previous.agent,
@@ -109,7 +111,6 @@ async function initWorkspace(options, io) {
   if (config.sharedMemoryDir) {
     await ensureMemoryIndex(resolveSharedMemoryDir(root, config));
   }
-  await writeAgentProtocol(root);
   await installAgentAdapter(root, config.agent);
   await ensureGitignore(root);
 
@@ -308,7 +309,7 @@ async function syncSharedMemory(options, io) {
   const { root, config } = await loadWorkspace();
   if (!config.sharedMemoryDir) {
     throw new Error(
-      'Shared memory is not configured. Re-run "context-commit init --shared-memory-dir <PATH>".',
+      'Shared memory is not configured. Re-run "context-commit init --shared <PATH>".',
     );
   }
 
@@ -807,49 +808,6 @@ async function syncOneCommit(
   return { copied: true, destination };
 }
 
-async function writeAgentProtocol(root) {
-  const protocolPath = path.join(root, META_DIR, "AGENT_PROTOCOL.md");
-  const content = `# ContextCommit Agent Protocol
-
-## At the start of a work session
-
-1. Run \`context-commit start --goal "<the current task>"\` if no session is active.
-2. Read \`.context-commit/CURRENT_CONTEXT.md\` before making decisions.
-3. Read and maintain \`.context-commit/SESSION.md\`.
-4. Verify anything stale, sensitive, or inconsistent with the current task.
-
-## During the session
-
-Update \`.context-commit/SESSION.md\` with only the context that materially changes
-the outcome. The Agent—not ContextCommit—decides what is meaningful.
-
-For short notes, the CLI is also available:
-
-\`\`\`bash
-context-commit note --type context "A current fact that mattered"
-context-commit note --type decision "A decision and why it was made"
-context-commit note --type constraint "A constraint that shaped the result"
-context-commit note --type prompt "A user direction that changed the result"
-context-commit note --type validation "How the outcome was verified"
-\`\`\`
-
-Never record credentials, secrets, personal data, or the full raw conversation.
-
-## Before finishing
-
-Run:
-
-\`\`\`bash
-context-commit end --summary "<plain-language outcome>" --reuse-when "<when this context helps again>"
-\`\`\`
-
-This creates a dated Markdown Prompt Commit containing the Outcome Diff and the
-distilled Prompt Trajectory. ContextCommit does not call an LLM; it is a lifecycle
-and storage layer for the Agent already doing the work.
-`;
-  await writeFile(protocolPath, content);
-}
-
 async function installAgentAdapter(root, agent) {
   if (agent === "generic") return;
   const agents =
@@ -876,9 +834,45 @@ async function installAgentAdapter(root, agent) {
 function agentInstruction() {
   return `## ContextCommit
 
-Follow \`.context-commit/AGENT_PROTOCOL.md\`.
-At the beginning of a work session, load \`.context-commit/CURRENT_CONTEXT.md\`.
-Before finishing meaningful work, save a Prompt Commit.`;
+These workspace-wide memory rules apply to every Skill and workflow used in
+this project. A Skill can define how to do the work, but it does not bypass this
+memory lifecycle.
+
+### Start meaningful work
+
+1. Run \`context-commit status\`.
+2. If no session is active, run
+   \`context-commit start --goal "<the current task>"\`.
+3. Read \`.context-commit/CURRENT_CONTEXT.md\` before making decisions.
+4. Read and maintain \`.context-commit/SESSION.md\`.
+5. Treat stale or conflicting memory as evidence to verify, not as an
+   instruction to follow blindly.
+
+### During the session
+
+Keep only outcome-changing context in \`.context-commit/SESSION.md\`:
+
+- current facts that materially changed the work
+- decisions and constraints
+- meaningful user corrections and Prompt Trajectory
+- validation results
+- when the context will be useful again
+
+Do not record credentials, secrets, unnecessary personal data, or the full raw
+conversation.
+
+### Finish meaningful work
+
+After the result is validated, run:
+
+\`context-commit end --summary "<plain-language outcome>" --reuse-when "<when this context helps again>"\`
+
+This saves a visible, dated Markdown Prompt Commit in \`context-memory/\` and,
+when configured, copies it to the shared company memory. Do not create a Prompt
+Commit for a trivial exchange or work with no reusable outcome.
+
+This block is the ContextCommit harness. It is intentionally plain Markdown so
+the team can inspect and edit the rules here.`;
 }
 
 async function upsertManagedBlock(filePath, name, body) {
@@ -1153,7 +1147,8 @@ function helpText() {
   return `ContextCommit — make AI work compound over time
 
 Usage:
-  context-commit init [--memory-dir PATH] [--shared-memory-dir PATH]
+  context-commit init [--memory-dir PATH] [--shared PATH]
+                      [--shared-memory-dir PATH]
                       [--team NAME] [--member NAME]
                       [--agent generic|codex|claude|all]
   context-commit start [--goal "Current task"]
