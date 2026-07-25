@@ -47,8 +47,8 @@ ContextCommit creates the shared structure automatically:
 company-context/
 ├── INDEX.md
 └── commits/
-    └── customer-care/
-        └── clinic-onboarding/
+    └── payments/
+        └── billing-service/
             └── 2026-07-25/
                 └── alex-<session-id>-<summary>.md
 ```
@@ -91,7 +91,7 @@ For separate team namespaces and explicit member names:
 ```bash
 context-commit init \
   --shared "/mounted/company-context" \
-  --team "customer-care" \
+  --team "payments" \
   --member "alex"
 ```
 
