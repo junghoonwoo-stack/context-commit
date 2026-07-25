@@ -21,6 +21,55 @@ function run(cwd, args) {
   return result.stdout;
 }
 
+test("zero-config init installs one visible harness for every Skill", async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-init-"));
+
+  const output = run(workspace, ["init"]);
+  assert.match(output, /Agent adapter: all/);
+
+  const agents = await readFile(path.join(workspace, "AGENTS.md"), "utf8");
+  const claude = await readFile(path.join(workspace, "CLAUDE.md"), "utf8");
+
+  for (const harness of [agents, claude]) {
+    assert.match(harness, /workspace-wide memory rules apply to every Skill/);
+    assert.match(harness, /context-commit start --goal/);
+    assert.match(harness, /\.context-commit\/CURRENT_CONTEXT\.md/);
+    assert.match(harness, /context-commit end --summary/);
+    assert.match(harness, /plain Markdown so/);
+    assert.doesNotMatch(harness, /AGENT_PROTOCOL\.md/);
+  }
+});
+
+test("a shared path alone creates company memory", async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-company-"));
+  const sharedMemory = await mkdtemp(
+    path.join(tmpdir(), "context-commit-network-drive-"),
+  );
+
+  const output = run(workspace, ["init", "--shared", sharedMemory]);
+  assert.match(output, new RegExp(`Shared memory: ${escapeForRegex(sharedMemory)}`));
+
+  run(workspace, ["start", "--goal", "Test the company memory layer"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "decision",
+    "A single shared path is enough for the first company setup.",
+  ]);
+  const endOutput = run(workspace, [
+    "end",
+    "--summary",
+    "Verified one-path company setup",
+  ]);
+
+  assert.match(endOutput, /Shared Prompt Commit/);
+  const sharedFiles = await findMarkdownFiles(sharedMemory);
+  assert.ok(
+    sharedFiles.some((file) => path.basename(file) !== "INDEX.md"),
+    "expected a Prompt Commit in shared company memory",
+  );
+});
+
 test("saves a dated Prompt Commit and loads it next session", async () => {
   const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-"));
   await writeFile(path.join(workspace, "brief.md"), "# Brief\n\nOld direction.\n");
@@ -233,4 +282,8 @@ async function findMarkdownFiles(root) {
   }
   await walk(root);
   return results;
+}
+
+function escapeForRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
