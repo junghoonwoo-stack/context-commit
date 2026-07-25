@@ -26,7 +26,7 @@ unit:
 
 Together, these form a **Prompt Commit**.
 
-## Try it in five minutes
+## Try it in two minutes
 
 ContextCommit requires Node.js 18 or later.
 
@@ -40,16 +40,16 @@ Open any working directory and initialize it:
 
 ```bash
 cd my-project
-context-commit init --agent codex
+context-commit init
 ```
 
-For Claude Code:
+That is the complete setup. ContextCommit adds a readable Markdown harness to
+both `AGENTS.md` and `CLAUDE.md`, so Codex and Claude Code apply the same memory
+rules to every Skill used in this working directory. Existing file content is
+preserved.
 
-```bash
-context-commit init --agent claude
-```
-
-Start a session:
+Now work normally with your Agent. For a deterministic first test, start a
+session yourself:
 
 ```bash
 context-commit start --goal "Improve the customer onboarding proposal"
@@ -60,8 +60,8 @@ ContextCommit creates two working files:
 - `.context-commit/CURRENT_CONTEXT.md` — relevant memory for the Agent to read
 - `.context-commit/SESSION.md` — the active session draft maintained by the Agent
 
-Work normally with your Agent. Before it finishes, the installed Agent protocol
-asks it to update `SESSION.md` and run:
+The installed harness asks the Agent to maintain `SESSION.md` and, after
+meaningful work, run:
 
 ```bash
 context-commit end --summary "Reframed onboarding around setup anxiety"
@@ -71,13 +71,14 @@ You can immediately see the result:
 
 ```text
 my-project/
+├── AGENTS.md                    # visible, editable global harness
+├── CLAUDE.md                    # same harness for Claude Code
 ├── context-memory/
 │   ├── INDEX.md
 │   └── 2026-07-25/
 │       └── 10-42-18-reframed-onboarding-around-setup-anxiety.md
 └── .context-commit/
-    ├── config.json
-    └── AGENT_PROTOCOL.md
+    └── config.json
 ```
 
 Start another session:
@@ -104,24 +105,28 @@ Agent session
 This is **Context Compounding**: context created by one unit of work makes the
 next unit easier and more specific.
 
-## Use it as an organization
+## Start a company memory layer
 
 Keep the visible `context-memory/` folder as each person's local, durable
-memory. Add one shared folder to turn useful Prompt Commits into an
-organizational asset:
+memory. To make useful Prompt Commits available to coworkers, point
+ContextCommit at one shared folder.
 
-```bash
-context-commit init \
-  --agent codex \
-  --shared-memory-dir "/path/to/company-context" \
-  --team "customer-care" \
-  --member "alex"
+On a Windows network drive:
+
+```powershell
+context-commit init --shared "Z:\Company Context"
 ```
 
-The shared path can be:
+On macOS or Linux:
 
-- a locally synchronized SharePoint document library
+```bash
+context-commit init --shared "/Volumes/Company Context"
+```
+
+Nothing else is required for a first company test. The shared path may be:
+
 - a mounted network drive
+- a locally synchronized SharePoint document library
 - a checked-out private Git repository
 
 At the end of a session, ContextCommit saves locally first and then copies the
@@ -132,21 +137,23 @@ unavailable, the local commit remains safe. Retry later with:
 context-commit sync
 ```
 
-The next `start` reads relevant commits from both local and shared memory.
-Another team member can therefore start with context produced in someone
-else's Agent session. Shared retrieval is scoped to the configured `--team`;
-use a common team name only when the same access boundary should apply.
+The next `start` reads relevant commits from both local and shared memory. A
+second person who points ContextCommit at the same folder can therefore begin
+with context created in the first person's Agent session.
 
-For company-wide use, start with a dedicated SharePoint document library when
-the organization already relies on Microsoft 365 permissions, retention, and
-compliance. Use a private Git repository for engineering-heavy teams that want
-reviewable history and pull requests. A network drive is useful for a quick
-pilot but provides weaker versioning and governance.
+Larger organizations can optionally separate memory by team and record the
+member name:
 
-See [Organization memory](docs/ORGANIZATION_MEMORY.md) for the recommended
-layout and rollout path.
+```bash
+context-commit init --shared "/path/to/company-context" \
+  --team "customer-care" \
+  --member "alex"
+```
 
-## Agent-native by design
+See [Organization memory](docs/ORGANIZATION_MEMORY.md) for the folder layout,
+storage options, and access-control notes.
+
+## A visible Agent harness
 
 ContextCommit is not another AI Agent.
 
@@ -165,13 +172,23 @@ ContextCommit handles the deterministic parts:
 - indexing and retrieval
 - Agent-specific instruction files
 
-`init --agent codex` adds a managed block to `AGENTS.md`.
-`init --agent claude` adds one to `CLAUDE.md`. Existing content is preserved.
+By default, `init` adds the complete ContextCommit lifecycle as a managed,
+human-readable block in both `AGENTS.md` and `CLAUDE.md`. The rule explicitly
+applies across every Skill in the workspace. Teams can inspect and edit the
+Markdown instead of depending on an opaque memory system.
+
+To install only one adapter:
+
+```bash
+context-commit init --agent codex
+context-commit init --agent claude
+```
 
 ## Commands
 
 ```text
-context-commit init [--memory-dir PATH] [--shared-memory-dir PATH]
+context-commit init [--memory-dir PATH] [--shared PATH]
+                    [--shared-memory-dir PATH]
                     [--team NAME] [--member NAME]
                     [--agent generic|codex|claude|all]
 context-commit start [--goal "Current task"]
@@ -218,14 +235,14 @@ before sharing or syncing them.
 
 ## Current scope
 
-Version `0.2.0` supports:
+Version `0.3.0` supports:
 
 - local-first Markdown memory
 - working-directory snapshots
 - text artifact diffs
 - dated, session-level Prompt Commits
 - goal-aware retrieval with a lightweight local relevance score
-- Codex and Claude Code instruction adapters
+- visible, workspace-wide Codex and Claude Code harnesses
 - configurable memory paths
 - shared organization memory through filesystem-compatible storage
 - automatic local-first sync and cross-workspace retrieval
@@ -249,4 +266,17 @@ npm run check
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+ContextCommit is open source under the
+[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+In practical terms, individuals and companies may use, copy, modify, and
+distribute the software, including for commercial and internal use. The
+license also includes an express patent grant from contributors.
+
+When redistributing ContextCommit or a modified version, keep a copy of the
+license, mark modified files, and preserve applicable copyright, patent,
+trademark, and attribution notices. The software is provided without warranty.
+See the repository's [LICENSE](LICENSE) for the complete terms.
+
+The Apache license covers the ContextCommit software. It does not require users
+to publish the Prompt Commits or company memory they create with it.
