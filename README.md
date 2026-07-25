@@ -3,9 +3,9 @@
 **Git stores what changed. ContextCommit stores the context that made it
 change.**
 
-AI Agents can finish a document, analysis, plan, spreadsheet, or presentation.
-But the decisions and corrections that made the result useful often disappear
-with the session.
+AI Agents can finish code, a document, an analysis, a spreadsheet, or a
+presentation. But the decisions and corrections that made the result useful
+often disappear with the session.
 
 ContextCommit turns that small, reusable part of the work into visible Markdown
 and gives the relevant parts to the next Agent session.
@@ -23,16 +23,58 @@ No separate LLM API, database, or model configuration is required.
 
 ## Why ContextCommit exists
 
-Suppose an Agent writes a customer-care proposal. The first draft is technically
-correct, but you add two important corrections:
+### Where does an AI's sharpness come from?
 
-- lead with the customer's installation anxiety, not smart features
-- propose a 90-day field pilot before a full rollout
+A model may have learned from much of the world's public knowledge. It still
+does not automatically know the situation in front of you: the current goal,
+the constraint that changed this morning, the tradeoff your team already made,
+or the reaction that made you reconsider the plan.
 
-The final file contains the result, but it may not explain why those choices
-were made. The chat contains the explanation, but the next Agent may not see
-that chat. Saving the entire transcript creates noise and makes important
-context harder to find.
+That is why even the best model or expert Skill still needs prompting. We add
+our intent, assumptions, constraints, corrections, and latest information.
+Humans are unusually good **context sensors**: experience, tone, reactions, and
+local conditions tell us what matters now. Prompting transfers those signals to
+the Agent.
+
+Personal Agents such as OpenClaw, Claude Code, Codex, and Hermes Agent
+increasingly offer memory, persistent instructions, or local workspace files.
+After enough use, their answers can feel sharper because they know more of the
+user's working context.
+
+The harder problem is organizational:
+
+- the context each person injects is usually lost with the prompt
+- the final artifact shows what changed, but often not why
+- saving every transcript creates noise, cost, and privacy risk
+- one person's learning rarely improves the next person's Agent
+
+An organization therefore needs a shared memory layer that can turn useful
+individual Prompt Commits into common memory and automatically supply the
+relevant parts when another person starts an Agent session.
+
+ContextCommit makes the reusable delta explicit. It does not save the entire
+conversation. It keeps the **Outcome Diff** and the small **Prompt Trajectory**
+that caused it: the facts, decisions, constraints, corrections, and validation
+that materially changed the result.
+
+Together, these form a **Prompt Commit**.
+
+When one person's Prompt Commit can sharpen many future Agent sessions, context
+starts to accumulate like compound interest. This is **Context Compounding**.
+
+### A concrete example
+
+Suppose a Coding Agent fixes duplicate records created by retried payment
+webhooks. During the work, you provide two details that are not obvious from
+the code:
+
+- the provider may deliver the same event more than once and out of order
+- idempotency must use the provider's stable event ID without changing the
+  public API contract
+
+The merged code contains the fix, but the next developer may not know why this
+key was chosen or which compatibility constraint mattered. The chat contains
+the reasoning, but the next Coding Agent may never see it.
 
 ContextCommit saves the smaller unit that should survive:
 
@@ -40,8 +82,6 @@ ContextCommit saves the smaller unit that should survive:
 - which facts, decisions, constraints, and user corrections changed the result
 - how the result was validated
 - when that context should be reused
-
-Together, these form a **Prompt Commit**.
 
 The memory is not hidden inside a service. It is plain Markdown that people and
 Agents can read, edit, search, diff, move, or delete.
@@ -51,43 +91,44 @@ Agents can read, edit, search, diff, move, or delete.
 Create or open a normal work folder:
 
 ```bash
-mkdir customer-care-work
-cd customer-care-work
+mkdir billing-service
+cd billing-service
 context-commit init
 ```
 
 Start Codex or Claude Code in that folder and ask:
 
 ```text
-Create a one-page proposal for improving subscription-appliance onboarding.
+Fix the duplicate invoice records created when payment webhooks are retried.
 ```
 
 While reviewing the draft, add:
 
 ```text
-Do not lead with smart features. The real problem is the customer's anxiety
-about installation and ongoing care. Recommend a 90-day pilot first.
+The provider can deliver the same event more than once and out of order.
+Use its stable event ID for idempotency, preserve the current API contract,
+and add a regression test for legacy records.
 ```
 
-The Agent works on the document and keeps only the outcome-changing context in
+The Agent works on the code and keeps only the outcome-changing context in
 `.context-commit/SESSION.md`. When meaningful work finishes, the session becomes
 a dated Prompt Commit under `context-memory/`.
 
 In a later Agent session, ask only:
 
 ```text
-Draft an email to field teams explaining the onboarding pilot.
+Add support for refund webhooks.
 ```
 
 ContextCommit prepares a small `.context-commit/CURRENT_CONTEXT.md` containing
-the relevant prior decision. You do not have to repeat the installation-anxiety
-or 90-day-pilot direction.
+the relevant prior decision. You do not have to repeat the event-ID,
+out-of-order delivery, or compatibility constraints.
 
 Hooks normally handle the lifecycle. Manual commands remain available:
 
 ```bash
-context-commit start --goal "Improve subscription onboarding"
-context-commit end --summary "Reframed onboarding around installation anxiety"
+context-commit start --goal "Fix duplicate webhook processing"
+context-commit end --summary "Made payment webhooks idempotent by event ID"
 ```
 
 See [Lifecycle hooks](docs/HOOKS.md) for the optional manual and troubleshooting
@@ -96,14 +137,15 @@ details.
 ## What appears in the folder
 
 ```text
-customer-care-work/
+billing-service/
 ├── AGENTS.md
 ├── CLAUDE.md
-├── proposal.md
+├── src/
+├── test/
 ├── context-memory/
 │   ├── INDEX.md
 │   └── 2026-07-25/
-│       └── 10-42-18-reframed-onboarding-around-installation-anxiety.md
+│       └── 10-42-18-made-payment-webhooks-idempotent.md
 ├── .context-commit/
 │   ├── config.json
 │   ├── CURRENT_CONTEXT.md
@@ -159,8 +201,8 @@ exchange or work with no reusable outcome.
 
 This is the harness. A team can inspect and adapt these rules directly instead
 of depending on an opaque memory system. Because the rule is workspace-wide,
-an email-writing Skill, a spreadsheet Skill, and a research Skill all use the
-same memory lifecycle.
+a coding Skill, an email-writing Skill, a spreadsheet Skill, and a research
+Skill all use the same memory lifecycle.
 
 ## What `SESSION.md` looks like
 
@@ -169,38 +211,41 @@ The Agent maintains a structured draft during the work:
 ```markdown
 # Active ContextCommit Session
 
-Goal: Improve subscription-appliance onboarding
+Goal: Fix duplicate payment webhook processing
 
 ## Summary
 
-Reframed onboarding around installation anxiety and a 90-day pilot.
+Made webhook processing idempotent while preserving the public API contract.
 
 ## Context That Mattered
 
-- Customers need confidence that someone will manage installation and follow-up.
+- The provider can deliver the same event more than once and out of order.
+- Existing records may not contain the new idempotency key.
 
 ## Decisions
 
-- Lead with continuity of care, not smart-feature adoption.
-- Validate the operating model through a 90-day field pilot.
+- Use the provider's stable event ID as the idempotency key.
+- Add a database uniqueness constraint and use an idempotent upsert.
+- Preserve compatibility for legacy records and the current API contract.
 
 ## Prompt Trajectory
 
-- The user redirected the proposal from product features to customer anxiety.
+- The user corrected the initial timestamp-based deduplication approach.
+- The user added the legacy-record compatibility constraint.
 
 ## Validation
 
-- Checked that the executive summary, pilot plan, and field message use the same
-  value proposition.
+- Added tests for duplicate, delayed, and out-of-order delivery.
+- Verified the existing API contract and migration path.
 
 ## Reuse When
 
-- Creating customer-care proposals or field communications.
+- Implementing or reviewing payment webhook handlers.
 
 ## Metadata
 
-Topics: customer-onboarding, subscription-care
-Entities: 90-day onboarding pilot
+Topics: payments, webhooks, idempotency
+Entities: payment event ID, invoice record
 Sensitivity: internal
 Confidence: confirmed
 Status: active
@@ -217,21 +262,21 @@ creates lightweight cards:
 ```markdown
 # Current Context
 
-Goal: Draft an email to field teams explaining the onboarding pilot
+Goal: Add support for refund webhooks
 
-## Reframed onboarding around installation anxiety
+## Made payment webhooks idempotent by event ID
 
-- Source: `local:2026-07-25/10-42-18-reframed-onboarding.md`
-- Metadata: topics: customer-onboarding, subscription-care ·
+- Source: `local:2026-07-25/10-42-18-made-webhooks-idempotent.md`
+- Metadata: topics: payments, webhooks, idempotency ·
   confidence: confirmed · sensitivity: internal
-- Reuse when: Creating customer-care proposals or field communications.
-- Details: `context-commit show "local:2026-07-25/10-42-18-reframed-onboarding.md"`
-- Artifact diff: `context-commit show "local:2026-07-25/10-42-18-reframed-onboarding.md" --section diff`
+- Reuse when: Implementing or reviewing payment webhook handlers.
+- Details: `context-commit show "local:2026-07-25/10-42-18-made-webhooks-idempotent.md"`
+- Artifact diff: `context-commit show "local:2026-07-25/10-42-18-made-webhooks-idempotent.md" --section diff`
 
 ### Decisions
 
-- Lead with continuity of care, not smart-feature adoption.
-- Validate the operating model through a 90-day field pilot.
+- Use the provider's stable event ID as the idempotency key.
+- Preserve compatibility for legacy records and the current API contract.
 ```
 
 Only the compact card enters the active context first. The complete Prompt
@@ -284,11 +329,13 @@ In practice:
 
 The result grows like a work wiki, while the active context stays small.
 
-## It works for office work, not only code
+## It works for code and office work
 
 ContextCommit works wherever an Agent produces or changes meaningful work in a
 folder:
 
+- code changes, architecture decisions, tests, and incident fixes
+- API integrations, migrations, and pull-request follow-ups
 - strategy documents and executive briefs
 - meeting decisions and follow-up actions
 - customer research, interview synthesis, and proposals
@@ -301,6 +348,18 @@ folder:
 
 The work product can change from one session to the next. The reusable unit is
 the context that made the work correct.
+
+| Work | Context worth committing |
+| --- | --- |
+| Software | Architecture constraints, rejected approaches, compatibility rules, and validation |
+| Finance | Assumptions, exclusions, data corrections, and reconciliation rules |
+| Sales | Customer priorities, objections, decision criteria, and approved claims |
+| Operations | Exceptions, ownership, escalation rules, and process changes |
+| Research and policy | Source judgments, definitions, scope limits, and unresolved questions |
+
+These examples are not tied to one company, country, or industry. The same
+pattern works in a US startup repository, a Korean enterprise network drive, or
+an individual's local work folder.
 
 ## Share memory with a team
 
@@ -323,7 +382,7 @@ Add team and member names only when needed:
 
 ```bash
 context-commit init --shared "/path/to/context" \
-  --team "customer-care" --member "alex"
+  --team "payments" --member "alex"
 ```
 
 See [Organization memory](docs/ORGANIZATION_MEMORY.md) for access control,
@@ -351,9 +410,9 @@ More details:
 **Git이 무엇이 바뀌었는지를 저장한다면, ContextCommit은 왜 그렇게
 바뀌었는지를 저장합니다.**
 
-AI Agent는 문서, 분석, 기획안, 스프레드시트, 프레젠테이션을 완성할 수
-있습니다. 하지만 그 결과를 유용하게 만든 판단과 사용자 교정은 세션이
-끝나면 사라지기 쉽습니다.
+AI Agent는 코드, 문서, 분석, 기획안, 스프레드시트, 프레젠테이션을
+완성할 수 있습니다. 하지만 그 결과를 유용하게 만든 판단과 사용자 교정은
+세션이 끝나면 사라지기 쉽습니다.
 
 ContextCommit은 다음 업무에도 필요한 부분만 눈에 보이는 Markdown으로
 남기고, 다음 Agent 세션에 관련된 내용만 전달합니다.
@@ -372,16 +431,59 @@ Hook 승인이 필요할 때 `/hooks`를 열어 정확한 명령을 한 번 확�
 
 ## 왜 만들었는가
 
-Agent에게 고객 케어 제안서를 작성시켰다고 가정해 보겠습니다. 첫 초안을
-본 뒤 사용자가 두 가지 중요한 교정을 합니다.
+### AI의 ‘뾰족함’은 어디서 오는가?
 
-- 스마트 기능보다 고객의 설치 불안을 먼저 다룰 것
-- 전면 도입 전에 90일 현장 파일럿을 제안할 것
+AI는 전 세계의 방대한 지식을 학습했지만, 지금 내가 처한 상황까지
+자동으로 알지는 못합니다. 오늘 아침 바뀐 제약조건, 이미 검토하고 버린
+대안, 팀이 선택한 Trade-off, 상대방의 반응을 보고 달라진 판단은 모델
+안에 없습니다.
 
-최종 문서에는 결과가 있지만 왜 그런 선택을 했는지는 남지 않을 수
-있습니다. 대화에는 이유가 있지만 다음 Agent가 그 대화를 본다는 보장은
-없습니다. 전체 대화를 모두 저장하면 잡음이 커져 정작 중요한 맥락을
-찾기 어려워집니다.
+그래서 아무리 뛰어난 모델이나 Guru의 Skill을 사용해도 우리는 추가로
+Prompting을 합니다. 목표, 가정, 제약조건, 최신 정보, 교정을 주입합니다.
+사람은 경험, 눈치, 반응, 분위기, 현장의 변화를 감지하는 뛰어난
+**Context Sensor**입니다. Prompting은 사람이 감지한 현재의 맥락을
+Agent에게 전달하는 과정입니다.
+
+OpenClaw, Claude Code, Codex, Hermes Agent 같은 개인용 Agent는 Memory,
+지속 가능한 지침, Local Workspace File을 점점 더 많이 제공합니다.
+Agent를 오래 사용할수록 사용자의 업무 맥락이 쌓여 답변이 어느 순간
+뾰족해지는 경험이 가능합니다.
+
+더 어려운 문제는 조직입니다.
+
+- 각 구성원이 Prompt에 넣은 중요한 맥락이 세션과 함께 사라짐
+- 최종 산출물에는 무엇이 바뀌었는지는 있지만 왜 바뀌었는지는 부족함
+- 전체 대화를 저장하면 잡음, 비용, 개인정보 위험이 커짐
+- 한 사람의 학습이 다른 사람의 Agent를 더 뾰족하게 만들지 못함
+
+따라서 조직은 개인의 유용한 Prompt Commit을 공용 Memory로 만들고, 다른
+구성원이 Agent Session을 시작할 때 관련된 부분을 자동으로 제공하는
+Shared Memory Layer가 필요합니다.
+
+ContextCommit은 재사용할 가치가 있는 Delta를 명시적으로 남깁니다. 긴
+대화 전체가 아니라 실제로 달라진 **Outcome Diff**와 그 변화를 만든
+작은 **Prompt Trajectory**를 저장합니다. 즉, 결과를 바꾼 사실, 결정,
+제약조건, 사용자 교정, 검증만 남깁니다.
+
+이 한 단위를 **Prompt Commit**이라고 합니다.
+
+한 사람의 Prompt Commit이 여러 사람의 다음 Agent 세션을 더 뾰족하게
+만들면, 맥락은 복리처럼 쌓이기 시작합니다. 이것이 **Context
+Compounding**입니다.
+
+### 구체적인 사례
+
+Coding Agent가 결제 Webhook 재전송으로 중복 레코드가 생기는 문제를
+수정한다고 가정해 보겠습니다. 작업 중 코드만으로는 알기 어려운 두 가지
+맥락을 사용자가 제공합니다.
+
+- 결제사는 같은 Event를 여러 번, 순서가 바뀐 상태로 보낼 수 있음
+- 공개 API 계약은 바꾸지 않고 결제사가 제공하는 안정적인 Event ID를
+  멱등성 기준으로 사용해야 함
+
+병합된 코드에는 수정 결과가 있지만, 다음 개발자는 왜 이 Key를
+선택했는지, 어떤 호환성 제약이 중요했는지 알기 어렵습니다. 대화에는
+이유가 있지만 다음 Coding Agent가 그 대화를 본다는 보장도 없습니다.
 
 ContextCommit은 다음 세션까지 살아남아야 할 작은 단위만 저장합니다.
 
@@ -389,8 +491,6 @@ ContextCommit은 다음 세션까지 살아남아야 할 작은 단위만 저장
 - 결과를 바꾼 사실, 결정, 제약조건, 사용자 교정
 - 검증 방법
 - 미래에 다시 활용할 조건
-
-이 한 단위를 **Prompt Commit**이라고 합니다.
 
 Memory는 보이지 않는 서비스 안에 갇히지 않습니다. 사람과 Agent가 직접
 읽고, 고치고, 검색하고, 비교하고, 옮기고, 지울 수 있는 Markdown입니다.
@@ -400,44 +500,45 @@ Memory는 보이지 않는 서비스 안에 갇히지 않습니다. 사람과 Ag
 일반 업무 폴더를 만들거나 기존 폴더를 엽니다.
 
 ```bash
-mkdir customer-care-work
-cd customer-care-work
+mkdir billing-service
+cd billing-service
 context-commit init
 ```
 
 해당 폴더에서 Codex 또는 Claude Code를 시작하고 요청합니다.
 
 ```text
-구독 가전 온보딩을 개선하는 1페이지 제안서를 작성해줘.
+결제 Webhook 재전송 시 중복 Invoice가 생성되는 문제를 수정해줘.
 ```
 
 초안을 검토하며 다음과 같이 교정합니다.
 
 ```text
-스마트 기능을 앞세우지 마. 실제 문제는 설치와 지속적인 관리에 대한
-고객의 불안이야. 먼저 90일 파일럿을 제안해줘.
+결제사는 같은 Event를 여러 번, 순서가 바뀐 상태로 보낼 수 있어.
+안정적인 Event ID를 멱등성 기준으로 사용하고, 현재 공개 API 계약은
+유지해. 기존 레코드에 대한 Regression Test도 추가해줘.
 ```
 
-Agent는 문서를 작성하면서 결과를 바꾼 맥락만
+Agent는 코드를 수정하면서 결과를 바꾼 맥락만
 `.context-commit/SESSION.md`에 유지합니다. 의미 있는 작업이 끝나면
 세션은 `context-memory/` 아래 날짜별 Prompt Commit으로 저장됩니다.
 
 새로운 Agent 세션에서는 다음과 같이만 요청합니다.
 
 ```text
-온보딩 파일럿을 현장 조직에 설명하는 이메일을 작성해줘.
+Refund Webhook 지원을 추가해줘.
 ```
 
 ContextCommit은 이전 결정을 담은 작은
-`.context-commit/CURRENT_CONTEXT.md`를 준비합니다. 사용자는 설치 불안과
-90일 파일럿 방향을 다시 설명하지 않아도 됩니다.
+`.context-commit/CURRENT_CONTEXT.md`를 준비합니다. 사용자는 Event ID,
+순서가 바뀐 재전송, 기존 API 호환성 제약을 다시 설명하지 않아도 됩니다.
 
 Hook이 일반적인 시작과 종료를 처리합니다. 필요하면 직접 실행할 수도
 있습니다.
 
 ```bash
-context-commit start --goal "구독 온보딩 개선"
-context-commit end --summary "설치 불안 중심으로 온보딩 방향 전환"
+context-commit start --goal "Webhook 중복 처리 수정"
+context-commit end --summary "Event ID 기반으로 결제 Webhook 멱등성 확보"
 ```
 
 Hook의 수동 사용과 문제 해결은 [Lifecycle hooks](docs/HOOKS.md)에서
@@ -446,14 +547,15 @@ Hook의 수동 사용과 문제 해결은 [Lifecycle hooks](docs/HOOKS.md)에서
 ## 생성되는 폴더와 파일
 
 ```text
-customer-care-work/
+billing-service/
 ├── AGENTS.md
 ├── CLAUDE.md
-├── proposal.md
+├── src/
+├── test/
 ├── context-memory/
 │   ├── INDEX.md
 │   └── 2026-07-25/
-│       └── 10-42-18-설치-불안-중심으로-온보딩-방향-전환.md
+│       └── 10-42-18-결제-webhook-멱등성-확보.md
 ├── .context-commit/
 │   ├── config.json
 │   ├── CURRENT_CONTEXT.md
@@ -508,8 +610,8 @@ Skill과 업무 흐름에 공통으로 적용됩니다.
 
 이 규칙 자체가 ContextCommit의 Harness입니다. 보이지 않는 Memory
 시스템에 의존하지 않고 조직이 직접 읽고 고칠 수 있습니다. Workspace
-전체에 적용되므로 이메일 작성 Skill, 스프레드시트 Skill, 리서치 Skill이
-모두 같은 Memory 흐름을 따릅니다.
+전체에 적용되므로 Coding Skill, 이메일 작성 Skill, 스프레드시트 Skill,
+리서치 Skill이 모두 같은 Memory 흐름을 따릅니다.
 
 ## `SESSION.md` 사례
 
@@ -518,37 +620,41 @@ Agent는 작업 중 구조화된 초안을 유지합니다.
 ```markdown
 # Active ContextCommit Session
 
-Goal: 구독 가전 온보딩 개선
+Goal: 결제 Webhook 중복 처리 수정
 
 ## Summary
 
-설치 불안과 90일 파일럿을 중심으로 온보딩 방향을 전환함.
+공개 API 계약을 유지하면서 Webhook 처리를 멱등하게 수정함.
 
 ## Context That Mattered
 
-- 고객은 설치부터 사후관리까지 누군가 책임진다는 확신이 필요함.
+- 결제사는 동일 Event를 여러 번, 순서가 바뀐 상태로 보낼 수 있음.
+- 기존 레코드에는 새로운 멱등성 Key가 없을 수 있음.
 
 ## Decisions
 
-- 스마트 기능 이용보다 관리의 연속성을 핵심 가치로 제안함.
-- 전면 도입 전에 90일 현장 파일럿으로 운영 모델을 검증함.
+- 결제사가 제공하는 안정적인 Event ID를 멱등성 Key로 사용함.
+- Database Unique Constraint와 Idempotent Upsert를 함께 적용함.
+- 기존 레코드와 현재 공개 API 계약의 호환성을 유지함.
 
 ## Prompt Trajectory
 
-- 사용자가 제품 기능 중심 초안을 고객 불안 중심으로 교정함.
+- 사용자가 Timestamp 기반 중복 제거 방식을 Event ID 기준으로 교정함.
+- 기존 레코드 호환성 제약을 추가함.
 
 ## Validation
 
-- 임원 요약, 파일럿 계획, 현장 메시지의 가치 제안이 일치하는지 확인함.
+- 중복, 지연, 순서 변경 Event에 대한 Test를 추가함.
+- 기존 API 계약과 Migration 경로를 확인함.
 
 ## Reuse When
 
-- 고객 케어 제안서 또는 현장 커뮤니케이션을 작성할 때.
+- 결제 Webhook Handler를 구현하거나 Review할 때.
 
 ## Metadata
 
-Topics: customer-onboarding, subscription-care
-Entities: 90-day onboarding pilot
+Topics: payments, webhooks, idempotency
+Entities: payment event ID, invoice record
 Sensitivity: internal
 Confidence: confirmed
 Status: active
@@ -565,21 +671,21 @@ Status: active
 ```markdown
 # Current Context
 
-Goal: 온보딩 파일럿을 현장 조직에 설명하는 이메일 작성
+Goal: Refund Webhook 지원 추가
 
-## 설치 불안 중심으로 온보딩 방향 전환
+## Event ID 기반으로 결제 Webhook 멱등성 확보
 
-- Source: `local:2026-07-25/10-42-18-온보딩-방향-전환.md`
-- Metadata: topics: customer-onboarding, subscription-care ·
+- Source: `local:2026-07-25/10-42-18-webhook-멱등성-확보.md`
+- Metadata: topics: payments, webhooks, idempotency ·
   confidence: confirmed · sensitivity: internal
-- Reuse when: 고객 케어 제안서 또는 현장 커뮤니케이션을 작성할 때
-- Details: `context-commit show "local:2026-07-25/10-42-18-온보딩-방향-전환.md"`
-- Artifact diff: `context-commit show "local:2026-07-25/10-42-18-온보딩-방향-전환.md" --section diff`
+- Reuse when: 결제 Webhook Handler를 구현하거나 Review할 때
+- Details: `context-commit show "local:2026-07-25/10-42-18-webhook-멱등성-확보.md"`
+- Artifact diff: `context-commit show "local:2026-07-25/10-42-18-webhook-멱등성-확보.md" --section diff`
 
 ### Decisions
 
-- 스마트 기능 이용보다 관리의 연속성을 핵심 가치로 제안함.
-- 전면 도입 전에 90일 현장 파일럿으로 운영 모델을 검증함.
+- 결제사가 제공하는 안정적인 Event ID를 멱등성 Key로 사용함.
+- 기존 레코드와 현재 공개 API 계약의 호환성을 유지함.
 ```
 
 처음에는 이 작은 카드만 Agent의 활성 Context에 들어갑니다. 전체 Prompt
@@ -631,11 +737,13 @@ Context를 효율적으로 취합하는 방식은
 
 따라서 지식은 업무 Wiki처럼 계속 쌓이지만 활성 Context는 작게 유지됩니다.
 
-## 코딩이 아닌 모든 사무 업무에 적용
+## 코딩과 모든 사무 업무에 적용
 
 Agent가 폴더 안에서 의미 있는 결과를 만들거나 수정하는 업무라면 적용할
 수 있습니다.
 
+- 코드 수정, Architecture 결정, Test, 장애 대응
+- API 연동, Migration, Pull Request 후속 조치
 - 전략 문서와 임원 보고
 - 회의 결정사항과 후속 조치
 - 고객 조사, 인터뷰 분석, 제안서
@@ -648,6 +756,18 @@ Agent가 폴더 안에서 의미 있는 결과를 만들거나 수정하는 업�
 
 매번 만드는 산출물은 달라도 됩니다. 다음 업무에 재사용되는 것은 그
 산출물을 정확하게 만든 Context입니다.
+
+| 업무 | Commit할 가치가 있는 Context |
+| --- | --- |
+| Software | Architecture 제약, 버린 대안, 호환성 규칙, 검증 결과 |
+| 재무 | 가정, 제외 기준, Data 교정, 대사 규칙 |
+| 영업 | 고객 우선순위, 반론, 의사결정 기준, 승인된 Claim |
+| 운영 | 예외 상황, 담당자, Escalation 규칙, Process 변경 |
+| Research·정책 | 출처 판단, 정의, 범위 제한, 미해결 질문 |
+
+특정 회사, 국가, 산업에 종속된 방식이 아닙니다. 미국 Startup의 Code
+Repository, 한국 기업의 Network Drive, 개인의 Local 업무 폴더에서 같은
+패턴으로 사용할 수 있습니다.
 
 ## 조직이 함께 사용하기
 
@@ -670,7 +790,7 @@ context-commit init --shared "/Volumes/Company Context"
 
 ```bash
 context-commit init --shared "/path/to/context" \
-  --team "customer-care" --member "junghoon"
+  --team "payments" --member "minji"
 ```
 
 권한, 폴더 구조, 동기화 방식은
