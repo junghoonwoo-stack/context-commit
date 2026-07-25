@@ -1,340 +1,187 @@
 # ContextCommit
 
-**Git preserves what changed. ContextCommit preserves the context that made it
-change.**
-
-ContextCommit is a small, local-first layer for AI Agents such as Codex and
-Claude Code. The Agent decides what mattered. ContextCommit gives that context
-a lifecycle: start a session, capture the meaningful outcome, save a dated
-Markdown commit, and progressively disclose relevant memory in the next
-session.
-
-It does **not** call an LLM. There is no API key, model configuration, database,
-or additional token cost.
-
-## Why
-
-AI Agents become sharp when they know the current goal, constraints, decisions,
-feedback, and local conditions. That context is usually lost when a session
-ends.
-
-Saving every raw conversation is noisy and risky. ContextCommit keeps a smaller
-unit:
-
-- **Outcome Diff** — what meaningfully changed
-- **Prompt Trajectory** — the directions and corrections that caused the change
-- **Context That Mattered** — current facts and signals worth reusing
-- **Reuse When** — when a future Agent should retrieve it
-
-Together, these form a **Prompt Commit**.
-
-## Try it in two minutes
-
-ContextCommit requires Node.js 18 or later.
-
-Install directly from GitHub:
+**Visible, editable memory for AI Agents.**
 
 ```bash
 npm install -g github:junghoonwoo-stack/context-commit
-```
-
-Open any working directory and initialize it:
-
-```bash
 cd my-project
 context-commit init
 ```
 
-That is the complete setup. ContextCommit:
+Open Codex or Claude Code, run `/hooks` once, and work normally.
 
-- adds readable memory rules to `AGENTS.md` and `CLAUDE.md`
-- applies those rules to every Skill in the working directory
-- installs project lifecycle hooks for Codex and Claude Code
-- preserves existing instructions and hook settings
+[English](#english) · [한국어](#한국어)
 
-Open Codex or Claude Code and run `/hooks` once to review and trust the
-project-local hooks. Then work normally. The hooks start the memory session,
-inject goal-relevant lightweight context with the first prompt, and finalize
-meaningful memory when the Agent session ends.
+---
 
-During work, ContextCommit uses two visible files:
+## English
 
-- `.context-commit/CURRENT_CONTEXT.md` — relevant memory for the Agent to read
-- `.context-commit/SESSION.md` — the active session draft maintained by the Agent
+ContextCommit saves the useful context from one AI work session and gives the
+relevant parts to the next session.
 
-The installed harness asks the Agent to maintain `SESSION.md`. You can also
-start or finish a session manually:
+- Plain Markdown; no API key, database, or extra LLM call
+- Visible rules in `AGENTS.md` and `CLAUDE.md`, applied to every Skill
+- Automatic start, context loading, and save through project hooks
+
+### Start
 
 ```bash
-context-commit start --goal "Improve the customer onboarding proposal"
-context-commit end --summary "Reframed onboarding around setup anxiety"
+npm install -g github:junghoonwoo-stack/context-commit
+cd my-project
+context-commit init
 ```
 
-You can immediately see the result:
+Run `/hooks` once to review and trust the hooks. That is all.
 
 ```text
-my-project/
-├── AGENTS.md                    # visible, editable global harness
-├── CLAUDE.md                    # same harness for Claude Code
-├── context-memory/
-│   ├── INDEX.md
-│   └── 2026-07-25/
-│       └── 10-42-18-reframed-onboarding-around-setup-anxiety.md
-└── .context-commit/
-    └── config.json
+context-memory/                         saved Prompt Commits
+.context-commit/CURRENT_CONTEXT.md     relevant context
+.context-commit/SESSION.md             current session
+AGENTS.md                              visible, editable rules
 ```
 
-Start another session:
+### Use more only when needed
 
 ```bash
-context-commit start --goal "Create onboarding messages"
+context-commit status
+context-commit show "<source>"                  # details
+context-commit show "<source>" --section diff   # exact changes
 ```
 
-The previous Prompt Commit is now represented by a compact card in
-`.context-commit/CURRENT_CONTEXT.md`. The next Agent starts with the useful
-context created by the previous one without preloading its full file diff.
-
-## Context stays small with progressive disclosure
-
-`CURRENT_CONTEXT.md` is an index, not a memory dump.
+Context is loaded progressively:
 
 ```text
-Level 0  CURRENT_CONTEXT.md
-         summary + metadata + key decisions + source pointer
-
-Level 1  context-commit show "<source>"
-         full Prompt Commit details, without artifact diff
-
-Level 2  context-commit show "<source>" --section diff
-         exact artifact changes, loaded only when needed
+summary → details → file diff
 ```
 
-In the included E2E test, two Prompt Commits totaling 9,102 characters produce
-a 1,530-character `CURRENT_CONTEXT.md`. The complete Markdown and diffs remain
-visible and editable on disk.
+Hooks are automatic. Manual control is also available:
 
-Metadata makes this retrieval safer and sharper:
-
-- specific topics and named entities
-- personal or team scope
-- freshness horizon and active/superseded status
-- sensitivity and confidence
-- concrete reuse conditions
-
-See [Prompt Commit format](docs/PROMPT_COMMIT_FORMAT.md) for the rules.
-See [Lifecycle hooks](docs/HOOKS.md) for installed files, trust, and fallback
-behavior.
-
-## How the flywheel works
-
-```text
-Agent session
-    → Outcome Diff
-    → Prompt Commit
-    → dated Markdown memory
-    → relevant context loaded next session
-    → sharper Agent work
+```bash
+context-commit start --goal "Improve onboarding"
+context-commit note --type decision "Focus on setup anxiety"
+context-commit end --summary "Reframed the proposal"
 ```
 
-This is **Context Compounding**: context created by one unit of work makes the
-next unit easier and more specific.
+### Share with a team
 
-## Start a company memory layer
-
-Keep the visible `context-memory/` folder as each person's local, durable
-memory. To make useful Prompt Commits available to coworkers, point
-ContextCommit at one shared folder.
-
-On a Windows network drive:
+Point to one network or synchronized folder:
 
 ```powershell
 context-commit init --shared "Z:\Company Context"
 ```
 
-On macOS or Linux:
+```bash
+context-commit init --shared "/Volumes/Company Context"
+```
+
+It can be a network drive, synchronized SharePoint folder, or Git working
+directory. ContextCommit saves locally first, then copies to the shared folder.
+
+Add `--team` and `--member` only when you need separation:
+
+```bash
+context-commit init --shared "/path/to/context" \
+  --team "customer-care" --member "alex"
+```
+
+More: [Prompt Commit format](docs/PROMPT_COMMIT_FORMAT.md) ·
+[hooks](docs/HOOKS.md) ·
+[organization memory](docs/ORGANIZATION_MEMORY.md)
+
+### Privacy and license
+
+ContextCommit does not upload data or call an LLM. Review Markdown before
+sharing; automated redaction is not a complete security boundary.
+
+Licensed under [Apache 2.0](LICENSE). Individuals and companies may use, modify,
+and distribute it, including internally and commercially. Required license and
+notices must remain when redistributing. Your Prompt Commits and company memory
+do not have to be published.
+
+---
+
+## 한국어
+
+ContextCommit은 AI와 일하며 생긴 중요한 맥락을 저장하고, 다음 작업에
+필요한 부분만 다시 전달합니다.
+
+- API Key, 데이터베이스, 추가 LLM 호출 없이 Markdown으로 저장
+- 모든 Skill에 적용되는 규칙을 `AGENTS.md`와 `CLAUDE.md`에서 직접 확인
+- 프로젝트 Hook으로 시작, Context 불러오기, 저장을 자동 처리
+
+### 시작
+
+```bash
+npm install -g github:junghoonwoo-stack/context-commit
+cd my-project
+context-commit init
+```
+
+Codex 또는 Claude Code에서 `/hooks`를 한 번 실행해 Hook을 확인하고
+신뢰하면 끝입니다. 이후에는 평소처럼 Agent와 일하면 됩니다.
+
+```text
+context-memory/                         저장된 Prompt Commit
+.context-commit/CURRENT_CONTEXT.md     필요한 과거 Context
+.context-commit/SESSION.md             현재 작업 내용
+AGENTS.md                              직접 보고 고치는 규칙
+```
+
+### 필요할 때만 더 보기
+
+```bash
+context-commit status
+context-commit show "<source>"                  # 상세 내용
+context-commit show "<source>" --section diff   # 실제 변경
+```
+
+Context는 필요한 만큼만 단계적으로 불러옵니다.
+
+```text
+요약 → 상세 내용 → 파일 Diff
+```
+
+Hook이 자동 처리하지만 직접 시작하고 종료할 수도 있습니다.
+
+```bash
+context-commit start --goal "고객 온보딩 개선"
+context-commit note --type decision "설치 불안을 중심으로 작성"
+context-commit end --summary "제안서 방향 수정"
+```
+
+### 회사에서 함께 쓰기
+
+공용 폴더 경로 하나만 지정합니다.
+
+```powershell
+context-commit init --shared "Z:\Company Context"
+```
 
 ```bash
 context-commit init --shared "/Volumes/Company Context"
 ```
 
-Nothing else is required for a first company test. The shared path may be:
+네트워크 드라이브, 동기화된 SharePoint 폴더, Git 작업 폴더를 사용할 수
+있습니다. 개인 폴더에 먼저 저장한 뒤 공용 폴더로 복사합니다.
 
-- a mounted network drive
-- a locally synchronized SharePoint document library
-- a checked-out private Git repository
-
-At the end of a session, ContextCommit saves locally first and then copies the
-Prompt Commit to the shared memory. If the shared location is temporarily
-unavailable, the local commit remains safe. Retry later with:
+팀을 나눌 때만 옵션을 추가합니다.
 
 ```bash
-context-commit sync
+context-commit init --shared "/path/to/context" \
+  --team "customer-care" --member "junghoon"
 ```
 
-The next `start` reads relevant commits from both local and shared memory. A
-second person who points ContextCommit at the same folder can therefore begin
-with context created in the first person's Agent session.
+더 보기: [Prompt Commit 형식](docs/PROMPT_COMMIT_FORMAT.md) ·
+[Hook](docs/HOOKS.md) ·
+[조직 Memory](docs/ORGANIZATION_MEMORY.md)
 
-Larger organizations can optionally separate memory by team and record the
-member name:
+### 개인정보·라이선스
 
-```bash
-context-commit init --shared "/path/to/company-context" \
-  --team "customer-care" \
-  --member "alex"
-```
+ContextCommit은 데이터를 업로드하거나 LLM을 호출하지 않습니다. 자동
+비밀정보 제거는 완전한 보안 장치가 아니므로 공유 전 Markdown을 확인해야
+합니다.
 
-See [Organization memory](docs/ORGANIZATION_MEMORY.md) for the folder layout,
-storage options, and access-control notes.
-
-## A visible Agent harness
-
-ContextCommit is not another AI Agent.
-
-The Agent is responsible for semantic judgment:
-
-- what changed in a meaningful way
-- which direction or correction caused that change
-- which context is reusable
-- what should be ignored
-
-ContextCommit handles the deterministic parts:
-
-- session start and end
-- workspace snapshots and artifact diffs
-- dated Markdown storage
-- indexing and retrieval
-- Agent-specific instruction files
-
-By default, `init` adds the complete ContextCommit lifecycle as a managed,
-human-readable block in both `AGENTS.md` and `CLAUDE.md`. The rule explicitly
-applies across every Skill in the workspace. Teams can inspect and edit the
-Markdown instead of depending on an opaque memory system.
-
-It also installs deterministic project hooks:
-
-- `SessionStart` starts a ContextCommit session
-- `UserPromptSubmit` injects relevant lightweight context once
-- `SessionEnd` saves a meaningful session or discards an unchanged one
-
-Check them at any time:
-
-```bash
-context-commit hooks status
-context-commit hooks install --agent all
-```
-
-Use `context-commit init --no-hooks` only when the Agent runtime cannot or
-should not execute project-local hooks. The visible `AGENTS.md`/`CLAUDE.md`
-harness and manual commands still work.
-
-To install only one adapter:
-
-```bash
-context-commit init --agent codex
-context-commit init --agent claude
-```
-
-## Commands
-
-```text
-context-commit init [--memory-dir PATH] [--shared PATH]
-                    [--shared-memory-dir PATH]
-                    [--team NAME] [--member NAME]
-                    [--agent generic|codex|claude|all] [--no-hooks]
-context-commit start [--goal "Current task"]
-context-commit note [--type TYPE] "Meaningful context"
-context-commit end [--summary "Outcome"] [--reuse-when "When useful"]
-                   [--topics "topic-one, topic-two"]
-                   [--sensitivity LEVEL] [--confidence LEVEL]
-context-commit context [--goal "Current task"]
-context-commit show "<source>" [--section details|diff|all]
-context-commit hooks install|status [--agent codex|claude|all]
-context-commit sync [--force]
-context-commit status
-context-commit abandon --yes
-```
-
-Supported note types:
-
-```text
-context, decision, constraint, feedback, prompt, validation
-```
-
-`note` is optional. An Agent can edit `.context-commit/SESSION.md` directly.
-
-## Choose where memory is stored
-
-The default is the visible `context-memory/` folder inside the working
-directory. Choose another relative or absolute path during initialization:
-
-```bash
-context-commit init --memory-dir "./team-memory" --agent all
-context-commit init --memory-dir "/secure/private/context" --agent codex
-```
-
-Markdown is the source of truth. You can inspect it, edit it, commit it to Git,
-sync it through another system, or keep it entirely local.
-
-## Privacy
-
-ContextCommit does not upload anything.
-
-- raw conversations are not stored by default
-- common inline secret patterns are redacted from CLI notes
-- runtime snapshots and active session files are gitignored
-- final Prompt Commits are plain Markdown under the user's control
-
-Automated redaction is not a complete security boundary. Review Prompt Commits
-before sharing or syncing them.
-
-## Current scope
-
-Version `0.4.0` supports:
-
-- local-first Markdown memory
-- working-directory snapshots
-- text artifact diffs
-- dated, session-level Prompt Commits
-- goal-aware retrieval with a lightweight local relevance score
-- progressive disclosure of summaries, details, and artifact diffs
-- structured retrieval, freshness, sensitivity, and confidence metadata
-- visible, workspace-wide Codex and Claude Code harnesses
-- automatic Codex and Claude Code lifecycle hooks
-- configurable memory paths
-- shared organization memory through filesystem-compatible storage
-- automatic local-first sync and cross-workspace retrieval
-
-Planned:
-
-- OpenClaw and Hermes adapters
-- richer semantic diffs for non-code work
-- approval and retention workflows
-- native SharePoint and Git adapters
-- permission-aware retrieval, approval, audit, and retention controls
-
-## Development
-
-```bash
-git clone https://github.com/junghoonwoo-stack/context-commit.git
-cd context-commit
-npm test
-npm run check
-```
-
-## License
-
-ContextCommit is open source under the
-[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
-
-In practical terms, individuals and companies may use, copy, modify, and
-distribute the software, including for commercial and internal use. The
-license also includes an express patent grant from contributors.
-
-When redistributing ContextCommit or a modified version, keep a copy of the
-license, mark modified files, and preserve applicable copyright, patent,
-trademark, and attribution notices. The software is provided without warranty.
-See the repository's [LICENSE](LICENSE) for the complete terms.
-
-The Apache license covers the ContextCommit software. It does not require users
-to publish the Prompt Commits or company memory they create with it.
+[Apache 2.0](LICENSE) 라이선스로 제공됩니다. 개인과 기업 모두 내부 및
+상업적 사용, 수정, 재배포가 가능합니다. 재배포 시 필요한 라이선스와
+고지를 유지해야 합니다. 사용자가 만든 Prompt Commit이나 회사 Memory를
+공개할 의무는 없습니다.
