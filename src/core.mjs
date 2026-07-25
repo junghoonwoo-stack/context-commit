@@ -16,18 +16,23 @@ const CONFIG_FILE = "config.json";
 const CURRENT_FILE = "current.json";
 const CONTEXT_FILE = "CURRENT_CONTEXT.md";
 const SESSION_FILE = "SESSION.md";
-const FORMAT_VERSION = "context-commit/v1";
+const FORMAT_VERSION = "context-commit/v2";
+const PACKAGE_VERSION = "0.4.0";
+const DEFAULT_CONTEXT_ITEMS = 5;
+const DEFAULT_CONTEXT_ITEM_CHARS = 1400;
 const DEFAULT_CONFIG = {
-  version: 1,
+  version: 2,
   memoryDir: "context-memory",
   sharedMemoryDir: null,
   team: "default",
   member: null,
-  recentCommits: 5,
+  recentCommits: DEFAULT_CONTEXT_ITEMS,
+  maxContextItemChars: DEFAULT_CONTEXT_ITEM_CHARS,
   maxFileBytes: 262144,
   maxFiles: 1000,
   freshDays: 90,
   agent: "all",
+  hooks: true,
 };
 const IGNORED_NAMES = new Set([
   ".git",
@@ -55,6 +60,12 @@ export async function runCli(argv, io = console) {
       return endSession(options, io);
     case "context":
       return refreshContext(options, io);
+    case "show":
+      return showContext(options, io);
+    case "hooks":
+      return manageHooks(options, io);
+    case "hook":
+      return runHook(options, io);
     case "sync":
       return syncSharedMemory(options, io);
     case "status":
@@ -69,7 +80,7 @@ export async function runCli(argv, io = console) {
     case "version":
     case "--version":
     case "-v":
-      io.log("0.3.0");
+      io.log(PACKAGE_VERSION);
       return;
     default:
       throw new Error(`Unknown command "${command}". Run "context-commit help".`);
@@ -89,6 +100,7 @@ async function initWorkspace(options, io) {
     team: options.team || DEFAULT_CONFIG.team,
     member: options.member || process.env.USER || process.env.USERNAME || null,
     agent: options.agent || DEFAULT_CONFIG.agent,
+    hooks: options.hooks !== "false" && !options["no-hooks"],
   };
 
   await mkdir(metaDir, { recursive: true });
@@ -103,6 +115,10 @@ async function initWorkspace(options, io) {
       team: options.team || previous.team || DEFAULT_CONFIG.team,
       member: options.member || previous.member || config.member,
       agent: options.agent || previous.agent,
+      hooks:
+        options.hooks === "false" || options["no-hooks"]
+          ? false
+          : previous.hooks ?? config.hooks,
     });
   }
 
@@ -112,6 +128,9 @@ async function initWorkspace(options, io) {
     await ensureMemoryIndex(resolveSharedMemoryDir(root, config));
   }
   await installAgentAdapter(root, config.agent);
+  if (config.hooks) {
+    await installAgentHooks(root, config.agent);
+  }
   await ensureGitignore(root);
 
   io.log(`ContextCommit initialized in ${root}`);
@@ -124,6 +143,10 @@ async function initWorkspace(options, io) {
     }`,
   );
   io.log(`Agent adapter: ${config.agent}`);
+  io.log(`Lifecycle hooks: ${config.hooks ? "installed" : "disabled"}`);
+  if (config.hooks) {
+    io.log("Review and trust project hooks in your Agent's hook browser.");
+  }
   io.log("\nNext: context-commit start --goal \"What you are working on\"");
 }
 
@@ -244,6 +267,12 @@ async function endSession(options, io) {
     cleanDraftSection(sessionDraft["Reuse When"]) ||
     session.goal ||
     summary;
+  const metadata = buildCommitMetadata({
+    options,
+    sessionDraft,
+    session,
+    config,
+  });
   const freshDays = Number(options["fresh-days"] || config.freshDays);
   const memoryDir = resolveMemoryDir(root, config);
   const dayDir = path.join(memoryDir, localDate(endedAt));
@@ -262,6 +291,7 @@ async function endSession(options, io) {
     root,
     team: config.team,
     member: config.member,
+    metadata,
   });
   await writeFile(commitPath, markdown);
   await updateIndex(root, config);
@@ -303,6 +333,134 @@ async function refreshContext(options, io) {
   );
   io.log(`Context refreshed: ${contextPath}`);
   return contextPath;
+}
+
+async function showContext(options, io) {
+  const { root, config } = await loadWorkspace();
+  const reference = options._.join(" ").trim();
+  if (!reference) {
+    throw new Error(
+      'Provide a source from CURRENT_CONTEXT.md, for example: context-commit show "local:2026-07-25/example.md".',
+    );
+  }
+  const resolved = await resolveContextReference(root, config, reference);
+  const content = await readFile(resolved.file, "utf8");
+  const section = options.section || "details";
+  if (section === "all") {
+    io.log(content.trimEnd());
+    return resolved.file;
+  }
+  if (section === "diff") {
+    io.log(extractSection(content, "Artifact Diff") || "No artifact diff captured.");
+    return resolved.file;
+  }
+  if (section !== "details") {
+    throw new Error('Unknown section. Use "details", "diff", or "all".');
+  }
+  io.log(withoutSection(content, "Artifact Diff").trimEnd());
+  return resolved.file;
+}
+
+async function manageHooks(options, io) {
+  const action = options._[0] || "status";
+  const { root, config } = await loadWorkspace();
+  if (action === "install") {
+    const agent = options.agent || config.agent || "all";
+    await installAgentHooks(root, agent);
+    config.hooks = true;
+    await writeJson(path.join(root, META_DIR, CONFIG_FILE), config);
+    io.log(`Lifecycle hooks installed for: ${agent}`);
+    io.log("Review and trust project hooks in your Agent's hook browser.");
+    return;
+  }
+  if (action !== "status") {
+    throw new Error('Unknown hooks action. Use "hooks install" or "hooks status".');
+  }
+  const codex = await hasManagedHook(path.join(root, ".codex", "hooks.json"));
+  const claude = await hasManagedHook(path.join(root, ".claude", "settings.json"));
+  io.log(`Codex hooks: ${codex ? "installed" : "not installed"}`);
+  io.log(`Claude Code hooks: ${claude ? "installed" : "not installed"}`);
+  io.log(`Hooks enabled in ContextCommit: ${config.hooks ? "yes" : "no"}`);
+}
+
+async function runHook(options, io) {
+  const event = options._[0];
+  if (!["session-start", "prompt", "session-end"].includes(event)) {
+    throw new Error(
+      'Unknown hook event. Use "hook session-start", "hook prompt", or "hook session-end".',
+    );
+  }
+  if (event === "session-start") {
+    const { metaDir } = await loadWorkspace();
+    const currentPath = path.join(metaDir, CURRENT_FILE);
+    if (!(await exists(currentPath))) {
+      await startSession({}, silentIo());
+    }
+    io.log(
+      "ContextCommit session is active. Relevant lightweight context will be injected with the first user prompt.",
+    );
+    return;
+  }
+  if (event === "prompt") {
+    const input = await readHookInput();
+    const prompt = String(input.prompt || "").trim();
+    const { root, config, metaDir } = await loadWorkspace();
+    const currentPath = path.join(metaDir, CURRENT_FILE);
+    if (!(await exists(currentPath))) {
+      await startSession({ goal: prompt }, silentIo());
+    }
+    const session = JSON.parse(await readFile(currentPath, "utf8"));
+    if (session.contextInjected) return;
+    if (!session.goal && prompt) {
+      session.goal = prompt;
+    }
+    session.contextInjected = true;
+    await writeJson(currentPath, session);
+    const contextPath = await buildCurrentContext(root, config, session.goal || prompt);
+    const context = await readFile(contextPath, "utf8");
+    io.log(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "UserPromptSubmit",
+          additionalContext: context,
+        },
+      }),
+    );
+    return;
+  }
+
+  const { metaDir } = await loadWorkspace();
+  const currentPath = path.join(metaDir, CURRENT_FILE);
+  if (!(await exists(currentPath))) return;
+  const session = JSON.parse(await readFile(currentPath, "utf8"));
+  const draft = await readSessionDraft(metaDir);
+  const hasCapturedContext =
+    session.notes.length > 0 ||
+    [
+      "Summary",
+      "Outcome",
+      "Context That Mattered",
+      "Decisions",
+      "Constraints",
+      "Prompt Trajectory",
+      "Validation",
+      "Reuse When",
+    ].some((section) => Boolean(cleanDraftSection(draft[section])));
+  if (!hasCapturedContext) {
+    const { root, config } = await loadWorkspace();
+    const snapshotDir = path.join(metaDir, "runtime", session.id, "snapshot");
+    const changes = await calculateChanges(
+      root,
+      snapshotDir,
+      session.files,
+      await collectWorkspaceFiles(root, config),
+    );
+    if (changes.length === 0) {
+      await abandonSession({ yes: true }, silentIo());
+      return;
+    }
+  }
+  await endSession({}, silentIo());
 }
 
 async function syncSharedMemory(options, io) {
@@ -537,6 +695,7 @@ function renderPromptCommit({
   root,
   team,
   member,
+  metadata,
 }) {
   const grouped = groupNotes(session.notes);
   const artifacts = changes.map((change) => change.path);
@@ -547,6 +706,9 @@ function renderPromptCommit({
     artifacts.length === 0
       ? "  - none"
       : artifacts.map((item) => `  - ${yamlString(item)}`).join("\n");
+  const frontmatterTopics = renderYamlList(metadata.topics);
+  const frontmatterEntities = renderYamlList(metadata.entities);
+  const frontmatterContextTypes = renderYamlList(metadata.contextTypes);
   const outcomeParts = [];
   if (outcome) outcomeParts.push(outcome);
   if (changes.length === 0) {
@@ -571,10 +733,21 @@ started_at: ${yamlString(session.startedAt)}
 ended_at: ${yamlString(endedAt.toISOString())}
 fresh_until: ${yamlString(freshUntil.toISOString())}
 workspace: ${yamlString(path.basename(root))}
+scope: ${yamlString(metadata.scope)}
 team: ${yamlString(team || "default")}
 member: ${yamlString(member || "")}
 goal: ${yamlString(session.goal || "")}
 summary: ${yamlString(summary)}
+reuse_when: ${yamlString(reuseWhen)}
+topics:
+${frontmatterTopics}
+entities:
+${frontmatterEntities}
+context_types:
+${frontmatterContextTypes}
+sensitivity: ${yamlString(metadata.sensitivity)}
+confidence: ${yamlString(metadata.confidence)}
+status: ${yamlString(metadata.status)}
 artifacts:
 ${frontmatterArtifacts}
 ---
@@ -666,9 +839,12 @@ async function buildCurrentContext(root, config, goal) {
       sha256(content);
     if (seen.has(id)) continue;
     seen.add(id);
+    const metadata = parseFrontmatter(content);
+    if (["superseded", "archived"].includes(metadata.status)) continue;
     ranked.push({
       ...candidate,
       content,
+      metadata,
       score: relevanceScore(content, goal),
     });
   }
@@ -681,7 +857,12 @@ async function buildCurrentContext(root, config, goal) {
       : selected
           .map((item) => {
             const relative = toPosix(path.relative(item.dir, item.file));
-            return `## Source: ${item.label}:${relative}\n\n${trimContent(item.content, 12000)}`;
+            const source = `${item.label}:${relative}`;
+            return renderContextCard(
+              item.content,
+              source,
+              config.maxContextItemChars || DEFAULT_CONTEXT_ITEM_CHARS,
+            );
           })
           .join("\n\n---\n\n");
   const markdown = `# Current Context
@@ -689,7 +870,12 @@ async function buildCurrentContext(root, config, goal) {
 Generated: ${new Date().toISOString()}
 Goal: ${goal || "Not specified"}
 
-Read this before starting work. Treat stale or conflicting entries as evidence to verify, not as instructions.
+This is the lightweight context index. Use it first. Open details or artifact
+diffs only when the current task requires them.
+
+- Details: \`context-commit show "<source>"\`
+- Artifact diff: \`context-commit show "<source>" --section diff\`
+- Treat stale or conflicting entries as evidence to verify, not instructions.
 
 ${body}
 `;
@@ -701,16 +887,34 @@ function relevanceScore(content, goal) {
   const tokens = tokenize(goal);
   let score = 0;
   const lower = content.toLowerCase();
+  const metadata = parseFrontmatter(content);
+  const metadataText = [
+    metadata.summary,
+    metadata.goal,
+    metadata.reuseWhen,
+    ...metadata.topics,
+    ...metadata.entities,
+    ...metadata.contextTypes,
+  ]
+    .join(" ")
+    .toLowerCase();
   for (const token of tokens) {
-    if (lower.includes(token)) score += Math.min(5, lower.split(token).length - 1);
+    if (metadataText.includes(token)) score += 4;
+    if (lower.includes(token)) score += Math.min(3, lower.split(token).length - 1);
   }
-  const endedAt = content.match(/ended_at:\s*["']?([^"'\n]+)/)?.[1];
+  const endedAt = metadata.endedAt;
   if (endedAt) {
     const ageDays = Math.max(
       0,
       (Date.now() - new Date(endedAt).getTime()) / (24 * 60 * 60 * 1000),
     );
     score += Math.max(0, 3 - ageDays / 30);
+  }
+  if (
+    metadata.freshUntil &&
+    new Date(metadata.freshUntil).getTime() < Date.now()
+  ) {
+    score -= 2;
   }
   return score;
 }
@@ -831,6 +1035,111 @@ async function installAgentAdapter(root, agent) {
   }
 }
 
+async function installAgentHooks(root, agent) {
+  if (agent === "generic") return;
+  const agents =
+    agent === "all"
+      ? ["codex", "claude"]
+      : agent.split(",").map((item) => item.trim());
+  for (const item of agents) {
+    if (item === "codex") {
+      await upsertHookConfig(
+        path.join(root, ".codex", "hooks.json"),
+        "ContextCommit lifecycle hooks for this workspace.",
+      );
+    } else if (item === "claude") {
+      await upsertHookConfig(
+        path.join(root, ".claude", "settings.json"),
+        null,
+      );
+    } else if (item) {
+      throw new Error(`Unsupported agent adapter "${item}".`);
+    }
+  }
+}
+
+async function upsertHookConfig(filePath, description) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  let config = {};
+  if (await exists(filePath)) {
+    try {
+      config = JSON.parse(await readFile(filePath, "utf8"));
+    } catch {
+      throw new Error(
+        `Cannot install hooks because ${filePath} is not valid JSON.`,
+      );
+    }
+  }
+  if (description && !config.description) config.description = description;
+  config.hooks ||= {};
+  const definitions = {
+    SessionStart: {
+      matcher: "startup|resume|clear|compact",
+      hooks: [
+        {
+          type: "command",
+          command: "context-commit hook session-start",
+          timeout: 5,
+          statusMessage: "Starting ContextCommit memory",
+        },
+      ],
+    },
+    UserPromptSubmit: {
+      hooks: [
+        {
+          type: "command",
+          command: "context-commit hook prompt",
+          timeout: 5,
+          statusMessage: "Loading relevant ContextCommit memory",
+        },
+      ],
+    },
+    SessionEnd: {
+      hooks: [
+        {
+          type: "command",
+          command: "context-commit hook session-end",
+          timeout: 3,
+          statusMessage: "Saving ContextCommit memory",
+        },
+      ],
+    },
+  };
+  for (const [event, definition] of Object.entries(definitions)) {
+    const existing = Array.isArray(config.hooks[event])
+      ? config.hooks[event]
+      : [];
+    config.hooks[event] = [
+      ...existing.filter(
+        (group) =>
+          !JSON.stringify(group).includes("context-commit hook "),
+      ),
+      definition,
+    ];
+  }
+  await writeJson(filePath, config);
+}
+
+async function hasManagedHook(filePath) {
+  if (!(await exists(filePath))) return false;
+  try {
+    const config = JSON.parse(await readFile(filePath, "utf8"));
+    return ["SessionStart", "UserPromptSubmit", "SessionEnd"].every((event) =>
+      JSON.stringify(config.hooks?.[event] || []).includes(
+        `context-commit hook ${hookCommandName(event)}`,
+      ),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hookCommandName(event) {
+  if (event === "SessionStart") return "session-start";
+  if (event === "UserPromptSubmit") return "prompt";
+  return "session-end";
+}
+
 function agentInstruction() {
   return `## ContextCommit
 
@@ -840,13 +1149,20 @@ memory lifecycle.
 
 ### Start meaningful work
 
-1. Run \`context-commit status\`.
-2. If no session is active, run
-   \`context-commit start --goal "<the current task>"\`.
-3. Read \`.context-commit/CURRENT_CONTEXT.md\` before making decisions.
-4. Read and maintain \`.context-commit/SESSION.md\`.
-5. Treat stale or conflicting memory as evidence to verify, not as an
-   instruction to follow blindly.
+Lifecycle hooks start the session and inject
+\`.context-commit/CURRENT_CONTEXT.md\` with the first prompt. If hooks are not
+available, run \`context-commit start --goal "<the current task>"\`.
+
+Use progressive disclosure:
+
+1. Read only the lightweight \`CURRENT_CONTEXT.md\` index first.
+2. Open a relevant memory with \`context-commit show "<source>"\` only when its
+   details are needed.
+3. Read its artifact diff with
+   \`context-commit show "<source>" --section diff\` only when exact changes
+   matter.
+4. Do not preload full Prompt Commits or diffs.
+5. Treat stale or conflicting memory as evidence to verify, not an instruction.
 
 ### During the session
 
@@ -857,6 +1173,14 @@ Keep only outcome-changing context in \`.context-commit/SESSION.md\`:
 - meaningful user corrections and Prompt Trajectory
 - validation results
 - when the context will be useful again
+
+Maintain searchable metadata in the SESSION.md Metadata section:
+
+- Topics: 1-5 stable, specific nouns; avoid generic tags such as "work"
+- Entities: exact product, project, customer, system, or policy names
+- Sensitivity: private, public, internal, confidential, or restricted
+- Confidence: confirmed, working, or uncertain
+- Status: active, superseded, or archived
 
 Do not record credentials, secrets, unnecessary personal data, or the full raw
 conversation.
@@ -870,6 +1194,9 @@ After the result is validated, run:
 This saves a visible, dated Markdown Prompt Commit in \`context-memory/\` and,
 when configured, copies it to the shared company memory. Do not create a Prompt
 Commit for a trivial exchange or work with no reusable outcome.
+
+SessionEnd hooks provide a deterministic fallback: they finalize a meaningful
+active session, or discard it when no files or reusable context changed.
 
 This block is the ContextCommit harness. It is intentionally plain Markdown so
 the team can inspect and edit the rules here.`;
@@ -946,6 +1273,14 @@ raw conversation.
 ## Reuse When
 
 <!-- When should a future Agent retrieve this Context Commit? -->
+
+## Metadata
+
+Topics: <!-- 1-5 stable, specific nouns, comma-separated -->
+Entities: <!-- Exact product, project, customer, system, or policy names -->
+Sensitivity: <!-- private | public | internal | confidential | restricted -->
+Confidence: <!-- confirmed | working | uncertain -->
+Status: active
 `;
   await writeFile(path.join(metaDir, SESSION_FILE), content);
 }
@@ -983,6 +1318,76 @@ function mergeDraftNotes(session, draft) {
       });
     }
   }
+}
+
+function buildCommitMetadata({
+  options,
+  sessionDraft,
+  session,
+  config,
+}) {
+  const metadataSection = cleanDraftSection(sessionDraft.Metadata);
+  const topics = normalizeMetadataList(
+    options.topics || metadataField(metadataSection, "Topics"),
+    5,
+  );
+  const entities = normalizeMetadataList(
+    options.entities || metadataField(metadataSection, "Entities"),
+    8,
+  );
+  const grouped = groupNotes(session.notes);
+  const contextTypes = Object.entries(grouped)
+    .filter(([, notes]) => notes.length > 0)
+    .map(([type]) => (["feedback", "prompt"].includes(type) ? "instruction" : type));
+  const sensitivity = normalizeChoice(
+    options.sensitivity || metadataField(metadataSection, "Sensitivity"),
+    ["private", "public", "internal", "confidential", "restricted"],
+    config.sharedMemoryDir ? "internal" : "private",
+  );
+  const confidence = normalizeChoice(
+    options.confidence || metadataField(metadataSection, "Confidence"),
+    ["confirmed", "working", "uncertain"],
+    grouped.validation.length > 0 ? "confirmed" : "working",
+  );
+  const status = normalizeChoice(
+    options.status || metadataField(metadataSection, "Status"),
+    ["active", "superseded", "archived"],
+    "active",
+  );
+  return {
+    scope: config.sharedMemoryDir ? "team" : "personal",
+    topics,
+    entities,
+    contextTypes: [...new Set(contextTypes)],
+    sensitivity,
+    confidence,
+    status,
+  };
+}
+
+function metadataField(section, name) {
+  const match = String(section).match(
+    new RegExp(`^${escapeRegex(name)}:[ \\t]*(.*)$`, "im"),
+  );
+  return match?.[1]?.trim() || "";
+}
+
+function normalizeMetadataList(value, limit) {
+  return [
+    ...new Set(
+      String(value || "")
+        .replace(/<!--[\s\S]*?-->/g, "")
+        .split(/[,\n]/)
+        .map((item) => item.replace(/^\s*[-*]\s*/, "").trim())
+        .filter(Boolean)
+        .slice(0, limit),
+    ),
+  ];
+}
+
+function normalizeChoice(value, allowed, fallback) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return allowed.includes(normalized) ? normalized : fallback;
 }
 
 function draftItems(value) {
@@ -1072,6 +1477,174 @@ function redactInlineSecrets(text) {
     );
 }
 
+function renderYamlList(items) {
+  return items.length === 0
+    ? "  - none"
+    : items.map((item) => `  - ${yamlString(item)}`).join("\n");
+}
+
+function parseFrontmatter(content) {
+  const block = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] || "";
+  const scalar = (name) =>
+    block
+      .match(new RegExp(`^${escapeRegex(name)}:\\s*(.*)$`, "m"))?.[1]
+      ?.trim()
+      .replace(/^["']|["']$/g, "") || "";
+  const list = (name) => {
+    const lines = block.split(/\r?\n/);
+    const start = lines.findIndex((line) => line === `${name}:`);
+    if (start < 0) return [];
+    const items = [];
+    for (const line of lines.slice(start + 1)) {
+      const match = line.match(/^\s+-\s+(.+)$/);
+      if (!match) break;
+      const value = match[1].trim().replace(/^["']|["']$/g, "");
+      if (value !== "none") items.push(value);
+    }
+    return items;
+  };
+  return {
+    id: scalar("id"),
+    summary: scalar("summary"),
+    goal: scalar("goal"),
+    reuseWhen: scalar("reuse_when"),
+    freshUntil: scalar("fresh_until"),
+    endedAt: scalar("ended_at"),
+    scope: scalar("scope"),
+    team: scalar("team"),
+    member: scalar("member"),
+    sensitivity: scalar("sensitivity"),
+    confidence: scalar("confidence"),
+    status: scalar("status") || "active",
+    topics: list("topics"),
+    entities: list("entities"),
+    contextTypes: list("context_types"),
+    artifacts: list("artifacts"),
+  };
+}
+
+function renderContextCard(content, source, maxLength) {
+  const metadata = parseFrontmatter(content);
+  const summary =
+    metadata.summary ||
+    content.match(/^#\s+(.+)$/m)?.[1]?.trim() ||
+    path.basename(source);
+  const reuseWhen =
+    metadata.reuseWhen || oneLine(extractSection(content, "Reuse When"));
+  const freshness = metadata.freshUntil
+    ? new Date(metadata.freshUntil).getTime() < Date.now()
+      ? `stale since ${metadata.freshUntil.slice(0, 10)}`
+      : `fresh until ${metadata.freshUntil.slice(0, 10)}`
+    : "freshness not recorded";
+  const labels = [
+    metadata.topics.length > 0 ? `topics: ${metadata.topics.join(", ")}` : "",
+    metadata.entities.length > 0
+      ? `entities: ${metadata.entities.join(", ")}`
+      : "",
+    metadata.confidence ? `confidence: ${metadata.confidence}` : "",
+    metadata.sensitivity ? `sensitivity: ${metadata.sensitivity}` : "",
+    freshness,
+  ].filter(Boolean);
+  const fixed = `## ${summary}
+
+- Source: \`${source}\`
+- Metadata: ${labels.join(" · ")}
+- Reuse when: ${reuseWhen || "Not captured."}
+- Details: \`context-commit show "${source}"\`
+- Artifact diff: \`context-commit show "${source}" --section diff\``;
+  const sections = [
+    ["Outcome", extractSection(content, "Outcome Diff")],
+    ["Context", extractSection(content, "Context That Mattered")],
+    ["Decisions", extractSection(content, "Decisions")],
+    ["Constraints", extractSection(content, "Constraints")],
+  ]
+    .filter(([, value]) => value && !/^Not captured\./i.test(value))
+    .map(([name, value]) => `### ${name}\n\n${trimContent(value, 320)}`)
+    .join("\n\n");
+  return trimContent(`${fixed}${sections ? `\n\n${sections}` : ""}`, maxLength);
+}
+
+async function resolveContextReference(root, config, reference) {
+  const sources = {
+    local: resolveMemoryDir(root, config),
+  };
+  if (config.sharedMemoryDir) {
+    sources.shared = resolveSharedReadDir(root, config);
+  }
+  const sourceMatch = reference.match(/^(local|shared):(.*)$/);
+  if (sourceMatch) {
+    const base = sources[sourceMatch[1]];
+    if (!base) throw new Error(`The ${sourceMatch[1]} memory source is unavailable.`);
+    const file = path.resolve(base, sourceMatch[2]);
+    if (!isWithin(file, base) || !(await exists(file))) {
+      throw new Error(`Context source not found: ${reference}`);
+    }
+    return { label: sourceMatch[1], file };
+  }
+  const matches = [];
+  for (const [label, dir] of Object.entries(sources)) {
+    for (const file of await listMemoryFiles(dir)) {
+      const content = await readFile(file, "utf8");
+      const metadata = parseFrontmatter(content);
+      if (
+        metadata.id === reference ||
+        path.basename(file) === reference ||
+        path.basename(file, ".md").includes(reference)
+      ) {
+        matches.push({ label, file });
+      }
+    }
+  }
+  if (matches.length === 0) throw new Error(`Context source not found: ${reference}`);
+  if (matches.length > 1) {
+    throw new Error(
+      `Context reference is ambiguous. Use the exact local: or shared: source from CURRENT_CONTEXT.md.`,
+    );
+  }
+  return matches[0];
+}
+
+function extractSection(content, title) {
+  const pattern = new RegExp(
+    `^##\\s+${escapeRegex(title)}\\s*$\\r?\\n([\\s\\S]*?)(?=^##\\s+|(?![\\s\\S]))`,
+    "m",
+  );
+  return content.match(pattern)?.[1]?.trim() || "";
+}
+
+function withoutSection(content, title) {
+  const pattern = new RegExp(
+    `\\r?\\n##\\s+${escapeRegex(title)}\\s*\\r?\\n[\\s\\S]*?(?=\\r?\\n##\\s+|(?![\\s\\S]))`,
+    "m",
+  );
+  return content.replace(pattern, "");
+}
+
+function oneLine(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function readHookInput() {
+  let raw = "";
+  for await (const chunk of process.stdin) raw += chunk;
+  if (!raw.trim()) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function silentIo() {
+  return {
+    log() {},
+    warn() {},
+    error() {},
+  };
+}
+
 function yamlString(value) {
   return JSON.stringify(String(value));
 }
@@ -1150,11 +1723,15 @@ Usage:
   context-commit init [--memory-dir PATH] [--shared PATH]
                       [--shared-memory-dir PATH]
                       [--team NAME] [--member NAME]
-                      [--agent generic|codex|claude|all]
+                      [--agent generic|codex|claude|all] [--no-hooks]
   context-commit start [--goal "Current task"]
   context-commit note [--type TYPE] "Meaningful context"
   context-commit end [--summary "Outcome"] [--reuse-when "When useful"]
+                     [--topics "topic-one, topic-two"]
+                     [--sensitivity LEVEL] [--confidence LEVEL]
   context-commit context [--goal "Current task"]
+  context-commit show "<source>" [--section details|diff|all]
+  context-commit hooks install|status [--agent codex|claude|all]
   context-commit sync [--force]
   context-commit status
   context-commit abandon --yes

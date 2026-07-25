@@ -1,11 +1,13 @@
 # ContextCommit
 
-**Make every AI work session useful to the next one.**
+**Git preserves what changed. ContextCommit preserves the context that made it
+change.**
 
 ContextCommit is a small, local-first layer for AI Agents such as Codex and
 Claude Code. The Agent decides what mattered. ContextCommit gives that context
 a lifecycle: start a session, capture the meaningful outcome, save a dated
-Markdown commit, and load relevant commits into the next session.
+Markdown commit, and progressively disclose relevant memory in the next
+session.
 
 It does **not** call an LLM. There is no API key, model configuration, database,
 or additional token cost.
@@ -43,27 +45,28 @@ cd my-project
 context-commit init
 ```
 
-That is the complete setup. ContextCommit adds a readable Markdown harness to
-both `AGENTS.md` and `CLAUDE.md`, so Codex and Claude Code apply the same memory
-rules to every Skill used in this working directory. Existing file content is
-preserved.
+That is the complete setup. ContextCommit:
 
-Now work normally with your Agent. For a deterministic first test, start a
-session yourself:
+- adds readable memory rules to `AGENTS.md` and `CLAUDE.md`
+- applies those rules to every Skill in the working directory
+- installs project lifecycle hooks for Codex and Claude Code
+- preserves existing instructions and hook settings
 
-```bash
-context-commit start --goal "Improve the customer onboarding proposal"
-```
+Open Codex or Claude Code and run `/hooks` once to review and trust the
+project-local hooks. Then work normally. The hooks start the memory session,
+inject goal-relevant lightweight context with the first prompt, and finalize
+meaningful memory when the Agent session ends.
 
-ContextCommit creates two working files:
+During work, ContextCommit uses two visible files:
 
 - `.context-commit/CURRENT_CONTEXT.md` — relevant memory for the Agent to read
 - `.context-commit/SESSION.md` — the active session draft maintained by the Agent
 
-The installed harness asks the Agent to maintain `SESSION.md` and, after
-meaningful work, run:
+The installed harness asks the Agent to maintain `SESSION.md`. You can also
+start or finish a session manually:
 
 ```bash
+context-commit start --goal "Improve the customer onboarding proposal"
 context-commit end --summary "Reframed onboarding around setup anxiety"
 ```
 
@@ -87,9 +90,40 @@ Start another session:
 context-commit start --goal "Create onboarding messages"
 ```
 
-The previous Prompt Commit is now included in
-`.context-commit/CURRENT_CONTEXT.md`. The next Agent starts with the context
-created by the previous one.
+The previous Prompt Commit is now represented by a compact card in
+`.context-commit/CURRENT_CONTEXT.md`. The next Agent starts with the useful
+context created by the previous one without preloading its full file diff.
+
+## Context stays small with progressive disclosure
+
+`CURRENT_CONTEXT.md` is an index, not a memory dump.
+
+```text
+Level 0  CURRENT_CONTEXT.md
+         summary + metadata + key decisions + source pointer
+
+Level 1  context-commit show "<source>"
+         full Prompt Commit details, without artifact diff
+
+Level 2  context-commit show "<source>" --section diff
+         exact artifact changes, loaded only when needed
+```
+
+In the included E2E test, two Prompt Commits totaling 9,102 characters produce
+a 1,530-character `CURRENT_CONTEXT.md`. The complete Markdown and diffs remain
+visible and editable on disk.
+
+Metadata makes this retrieval safer and sharper:
+
+- specific topics and named entities
+- personal or team scope
+- freshness horizon and active/superseded status
+- sensitivity and confidence
+- concrete reuse conditions
+
+See [Prompt Commit format](docs/PROMPT_COMMIT_FORMAT.md) for the rules.
+See [Lifecycle hooks](docs/HOOKS.md) for installed files, trust, and fallback
+behavior.
 
 ## How the flywheel works
 
@@ -177,6 +211,23 @@ human-readable block in both `AGENTS.md` and `CLAUDE.md`. The rule explicitly
 applies across every Skill in the workspace. Teams can inspect and edit the
 Markdown instead of depending on an opaque memory system.
 
+It also installs deterministic project hooks:
+
+- `SessionStart` starts a ContextCommit session
+- `UserPromptSubmit` injects relevant lightweight context once
+- `SessionEnd` saves a meaningful session or discards an unchanged one
+
+Check them at any time:
+
+```bash
+context-commit hooks status
+context-commit hooks install --agent all
+```
+
+Use `context-commit init --no-hooks` only when the Agent runtime cannot or
+should not execute project-local hooks. The visible `AGENTS.md`/`CLAUDE.md`
+harness and manual commands still work.
+
 To install only one adapter:
 
 ```bash
@@ -190,11 +241,15 @@ context-commit init --agent claude
 context-commit init [--memory-dir PATH] [--shared PATH]
                     [--shared-memory-dir PATH]
                     [--team NAME] [--member NAME]
-                    [--agent generic|codex|claude|all]
+                    [--agent generic|codex|claude|all] [--no-hooks]
 context-commit start [--goal "Current task"]
 context-commit note [--type TYPE] "Meaningful context"
 context-commit end [--summary "Outcome"] [--reuse-when "When useful"]
+                   [--topics "topic-one, topic-two"]
+                   [--sensitivity LEVEL] [--confidence LEVEL]
 context-commit context [--goal "Current task"]
+context-commit show "<source>" [--section details|diff|all]
+context-commit hooks install|status [--agent codex|claude|all]
 context-commit sync [--force]
 context-commit status
 context-commit abandon --yes
@@ -235,14 +290,17 @@ before sharing or syncing them.
 
 ## Current scope
 
-Version `0.3.0` supports:
+Version `0.4.0` supports:
 
 - local-first Markdown memory
 - working-directory snapshots
 - text artifact diffs
 - dated, session-level Prompt Commits
 - goal-aware retrieval with a lightweight local relevance score
+- progressive disclosure of summaries, details, and artifact diffs
+- structured retrieval, freshness, sensitivity, and confidence metadata
 - visible, workspace-wide Codex and Claude Code harnesses
+- automatic Codex and Claude Code lifecycle hooks
 - configurable memory paths
 - shared organization memory through filesystem-compatible storage
 - automatic local-first sync and cross-workspace retrieval
@@ -251,7 +309,7 @@ Planned:
 
 - OpenClaw and Hermes adapters
 - richer semantic diffs for non-code work
-- approval and freshness workflows
+- approval and retention workflows
 - native SharePoint and Git adapters
 - permission-aware retrieval, approval, audit, and retention controls
 
