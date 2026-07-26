@@ -43,7 +43,7 @@ its lifecycle.
 | Result | Location | Loaded by other Agents? |
 | --- | --- | --- |
 | No reusable Skill Diff or outcome evidence | Discarded | No |
-| Personal or sensitive change | Local `context-memory/` | No |
+| Outcome evidence without a Skill Diff, or a personal/sensitive change | Local `context-memory/` | No |
 | Reusable but not validated | Shared `inbox/` | No |
 | Reusable, validated, low-risk Skill Diff | Shared `knowledge/` | Yes |
 
