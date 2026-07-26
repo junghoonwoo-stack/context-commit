@@ -111,7 +111,7 @@ test("zero-config init installs one visible harness for every Skill", async () =
   }
 });
 
-test("a shared path automatically routes unvalidated outcomes to the team inbox", async () => {
+test("a shared path routes an unvalidated Skill Diff to the team inbox", async () => {
   const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-company-"));
   const sharedMemory = await mkdtemp(
     path.join(tmpdir(), "context-commit-network-drive-"),
@@ -121,6 +121,12 @@ test("a shared path automatically routes unvalidated outcomes to the team inbox"
   assert.match(output, new RegExp(`Shared memory: ${escapeForRegex(sharedMemory)}`));
 
   run(workspace, ["start", "--goal", "Test the company memory layer"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "skill_diff",
+    "When a workspace uses company memory, route reusable unvalidated changes to the team inbox.",
+  ]);
   run(workspace, [
     "note",
     "--type",
@@ -183,7 +189,7 @@ test("saves a dated Prompt Commit and loads it next session", async () => {
     sessionDraftPath,
     sessionDraft
       .replace(
-        "<!-- What meaningfully changed beyond the automatic file diff? -->",
+        "<!-- What changed in the result, and how do we know the Skill Diff helped? -->",
         "The brief now prioritizes setup and ongoing care.",
       )
       .replace(
@@ -428,6 +434,12 @@ test("shares Prompt Commits across workspaces through organization memory", asyn
   run(firstWorkspace, [
     "note",
     "--type",
+    "skill_diff",
+    "When external reports are imported, add a physician review step before import.",
+  ]);
+  run(firstWorkspace, [
+    "note",
+    "--type",
     "decision",
     "Use a physician review before external reports are imported.",
   ]);
@@ -519,6 +531,12 @@ test("team candidates are visible in the inbox but are not injected", async () =
   run(authorWorkspace, [
     "note",
     "--type",
+    "skill_diff",
+    "When payment retries are implemented, use the provider event ID for deduplication.",
+  ]);
+  run(authorWorkspace, [
+    "note",
+    "--type",
     "decision",
     "Use the provider event ID for retry deduplication.",
   ]);
@@ -567,6 +585,12 @@ test("workspace policy can promote validated context organization-wide", async (
     "organization",
   ]);
   run(workspace, ["start", "--goal", "Standardize API retry handling"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "skill_diff",
+    "When an external retry handler is added, require a stable idempotency key.",
+  ]);
   run(workspace, [
     "note",
     "--type",
