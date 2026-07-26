@@ -411,7 +411,7 @@ private Git directory. ContextCommit always saves locally first. It then applies
 the built-in `skill-diff-v1` policy:
 
 - no reusable Skill Diff or outcome evidence → do not save
-- personal, sensitive, or weakly reusable context → keep local
+- outcome evidence without a Skill Diff, or personal/sensitive context → keep local
 - reusable but unvalidated context → shared `inbox/`
 - reusable, validated, low-risk context → shared `knowledge/`
 
