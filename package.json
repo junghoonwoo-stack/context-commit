@@ -1,7 +1,7 @@
 {
   "name": "context-commit",
-  "version": "0.4.0",
-  "description": "Turn meaningful AI work sessions into reusable context that compounds over time.",
+  "version": "0.5.0",
+  "description": "Promote outcome-changing Agent context into reusable organization memory.",
   "type": "module",
   "bin": {
     "context-commit": "./bin/context-commit.mjs",
