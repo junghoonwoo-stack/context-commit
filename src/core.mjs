@@ -195,7 +195,7 @@ async function startSession(options, io) {
   const session = {
     id,
     startedAt: startedAt.toISOString(),
-    goal: options.goal || "",
+    goal: redactInlineSecrets(options.goal || ""),
     files: files.map(({ path: filePath, hash, size }) => ({
       path: filePath,
       hash,
@@ -276,20 +276,23 @@ async function endSession(options, io) {
   );
 
   const endedAt = new Date();
-  const summary =
+  const summary = redactInlineSecrets(
     options.summary ||
-    firstUsefulLine(sessionDraft.Summary) ||
-    inferSummary(session, changes) ||
-    "Completed an AI-assisted work session.";
-  const outcome =
+      firstUsefulLine(sessionDraft.Summary) ||
+      inferSummary(session, changes) ||
+      "Completed an AI-assisted work session.",
+  );
+  const outcome = redactInlineSecrets(
     options.outcome ||
-    cleanDraftSection(sessionDraft["Outcome Evidence"]) ||
-    cleanDraftSection(sessionDraft.Outcome);
-  const reuseWhen =
+      cleanDraftSection(sessionDraft["Outcome Evidence"]) ||
+      cleanDraftSection(sessionDraft.Outcome),
+  );
+  const reuseWhen = redactInlineSecrets(
     options["reuse-when"] ||
-    cleanDraftSection(sessionDraft["Reuse When"]) ||
-    session.goal ||
-    summary;
+      cleanDraftSection(sessionDraft["Reuse When"]) ||
+      session.goal ||
+      summary,
+  );
   const metadata = buildCommitMetadata({
     options,
     sessionDraft,
@@ -792,7 +795,12 @@ function renderPromptCommit({
   metadata,
 }) {
   const grouped = groupNotes(session.notes);
-  const artifacts = changes.map((change) => change.path);
+  const safeChanges = changes.map((change) => ({
+    ...change,
+    path: redactInlineSecrets(change.path),
+    diff: redactInlineSecrets(change.diff),
+  }));
+  const artifacts = safeChanges.map((change) => change.path);
   const freshUntil = new Date(
     endedAt.getTime() + freshDays * 24 * 60 * 60 * 1000,
   );
@@ -805,15 +813,17 @@ function renderPromptCommit({
   const frontmatterContextTypes = renderYamlList(metadata.contextTypes);
   const outcomeParts = [];
   if (outcome) outcomeParts.push(outcome);
-  if (changes.length === 0) {
+  if (safeChanges.length === 0) {
     outcomeParts.push("No tracked workspace files changed.");
   } else {
     outcomeParts.push(
-      changes.map((change) => `- **${change.kind}:** \`${change.path}\``).join("\n"),
+      safeChanges
+        .map((change) => `- **${change.kind}:** \`${change.path}\``)
+        .join("\n"),
     );
   }
 
-  const diffBlocks = changes
+  const diffBlocks = safeChanges
     .map(
       (change) =>
         `### ${change.kind}: \`${change.path}\`\n\n\`\`\`diff\n${change.diff}\n\`\`\``,
@@ -939,15 +949,11 @@ async function buildCurrentContext(root, config, goal) {
       candidates.push({ ...source, file });
     }
   }
-  const ranked = [];
-  const seen = new Set();
+  const sourcePriority = { local: 1, team: 2, organization: 3 };
+  const candidatesById = new Map();
+  const scoredAt = Date.now();
   for (const candidate of candidates) {
     const content = await readFile(candidate.file, "utf8");
-    const id =
-      content.match(/^id:\s*(.+)$/m)?.[1]?.replace(/^["']|["']$/g, "") ||
-      sha256(content);
-    if (seen.has(id)) continue;
-    seen.add(id);
     const metadata = parseFrontmatter(content);
     if (
       ["superseded", "archived", "rejected", "expired"].includes(
@@ -957,14 +963,31 @@ async function buildCurrentContext(root, config, goal) {
     ) {
       continue;
     }
-    ranked.push({
+    const item = {
       ...candidate,
       content,
       metadata,
-      score: relevanceScore(content, goal),
-    });
+      id:
+        content.match(/^id:\s*(.+)$/m)?.[1]?.replace(/^["']|["']$/g, "") ||
+        sha256(content),
+      score: relevanceScore(content, goal, scoredAt),
+    };
+    const previous = candidatesById.get(item.id);
+    if (
+      !previous ||
+      (sourcePriority[item.label] || 0) >
+        (sourcePriority[previous.label] || 0)
+    ) {
+      candidatesById.set(item.id, item);
+    }
   }
-  ranked.sort((a, b) => b.score - a.score || b.file.localeCompare(a.file));
+  const ranked = [...candidatesById.values()];
+  ranked.sort(
+    (a, b) =>
+      b.score - a.score ||
+      (sourcePriority[b.label] || 0) - (sourcePriority[a.label] || 0) ||
+      b.file.localeCompare(a.file),
+  );
   const selected = ranked.slice(0, config.recentCommits);
   const contextPath = path.join(root, META_DIR, CONTEXT_FILE);
   const body =
@@ -999,7 +1022,7 @@ ${body}
   return contextPath;
 }
 
-function relevanceScore(content, goal) {
+function relevanceScore(content, goal, scoredAt = Date.now()) {
   const tokens = tokenize(goal);
   let score = 0;
   const lower = content.toLowerCase();
@@ -1022,7 +1045,7 @@ function relevanceScore(content, goal) {
   if (endedAt) {
     const ageDays = Math.max(
       0,
-      (Date.now() - new Date(endedAt).getTime()) / (24 * 60 * 60 * 1000),
+      (scoredAt - new Date(endedAt).getTime()) / (24 * 60 * 60 * 1000),
     );
     score += Math.max(0, 3 - ageDays / 30);
   }
@@ -1270,9 +1293,9 @@ function agentInstruction() {
   return `## ContextCommit
 
 These workspace-wide memory rules apply to every Skill and workflow used in
-this project. Their purpose is to turn outcome-changing tacit knowledge from
-prompts into reusable team or organization context. A Skill can define how to do
-the work, but it does not bypass this memory lifecycle.
+this project. Their purpose is to turn conditional Skill changes from prompts
+into reusable team or organization context. A Skill can define how to do the
+work, but it does not bypass this memory lifecycle.
 
 ### Start meaningful work
 
@@ -1323,7 +1346,7 @@ ContextCommit then evaluates the Skill Diff, its causal context, outcome
 evidence, and sensitivity. Personal work stays local; reusable work becomes a
 team or organization candidate; validated low-risk work is published by the
 workspace promotion policy. Do not create a Prompt Commit for a trivial
-exchange or work with no reusable outcome.
+exchange or work with no reusable Skill Diff or outcome evidence.
 
 SessionEnd hooks provide a deterministic fallback: they finalize a meaningful
 active session, or discard it when no files or reusable context changed.

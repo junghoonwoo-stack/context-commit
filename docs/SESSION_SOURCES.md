@@ -28,7 +28,7 @@ ContextCommit follows four rules:
 2. Keep discovery local and read-only.
 3. Never open credential, token, `.env`, key, or authentication files.
 4. Never copy a raw session into shared memory. A future import adapter must
-   normalize and redact it, then pass only an extracted Outcome Diff through the
+   normalize and redact it, then pass only an extracted Skill Diff through the
    same promotion policy.
 
 Hooks remain the primary real-time path. Session sources are fallback and
