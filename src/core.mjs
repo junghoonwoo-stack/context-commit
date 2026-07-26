@@ -17,12 +17,12 @@ const CONFIG_FILE = "config.json";
 const CURRENT_FILE = "current.json";
 const CONTEXT_FILE = "CURRENT_CONTEXT.md";
 const SESSION_FILE = "SESSION.md";
-const FORMAT_VERSION = "context-commit/v3";
-const PACKAGE_VERSION = "0.5.0";
+const FORMAT_VERSION = "context-commit/v4";
+const PACKAGE_VERSION = "0.6.0";
 const DEFAULT_CONTEXT_ITEMS = 5;
 const DEFAULT_CONTEXT_ITEM_CHARS = 1400;
 const DEFAULT_CONFIG = {
-  version: 3,
+  version: 4,
   memoryDir: "context-memory",
   sharedMemoryDir: null,
   team: "default",
@@ -35,7 +35,7 @@ const DEFAULT_CONFIG = {
   agent: "all",
   hooks: true,
   promotionTarget: "team",
-  promotionPolicy: "outcome-diff-v1",
+  promotionPolicy: "skill-diff-v1",
 };
 const IGNORED_NAMES = new Set([
   ".git",
@@ -237,6 +237,8 @@ async function addNote(options, io) {
     "constraint",
     "feedback",
     "prompt",
+    "base_skill",
+    "skill_diff",
     "validation",
   ]);
   const type = options.type || "context";
@@ -279,7 +281,10 @@ async function endSession(options, io) {
     firstUsefulLine(sessionDraft.Summary) ||
     inferSummary(session, changes) ||
     "Completed an AI-assisted work session.";
-  const outcome = options.outcome || cleanDraftSection(sessionDraft.Outcome);
+  const outcome =
+    options.outcome ||
+    cleanDraftSection(sessionDraft["Outcome Evidence"]) ||
+    cleanDraftSection(sessionDraft.Outcome);
   const reuseWhen =
     options["reuse-when"] ||
     cleanDraftSection(sessionDraft["Reuse When"]) ||
@@ -301,7 +306,7 @@ async function endSession(options, io) {
     });
     await rm(currentPath, { force: true });
     await rm(path.join(metaDir, SESSION_FILE), { force: true });
-    io.log("No Prompt Commit saved: no reusable Outcome Diff was detected.");
+    io.log("No Prompt Commit saved: no reusable Skill Diff or outcome evidence was detected.");
     return null;
   }
   const freshDays = Number(options["fresh-days"] || config.freshDays);
@@ -356,7 +361,7 @@ async function endSession(options, io) {
     `Classification: ${metadata.visibility} / ${metadata.lifecycle} (${metadata.promotionReason})`,
   );
   io.log(
-    `Outcome Diff: ${changes.filter((change) => change.kind !== "unchanged").length} changed artifacts`,
+    `Artifact Diff: ${changes.filter((change) => change.kind !== "unchanged").length} changed artifacts`,
   );
   io.log("\nThis commit will be considered when the next session starts.");
   return commitPath;
@@ -476,6 +481,9 @@ async function runHook(options, io) {
     session.notes.length > 0 ||
     [
       "Summary",
+      "Base Skill",
+      "Skill Diff",
+      "Outcome Evidence",
       "Outcome",
       "Context That Mattered",
       "Decisions",
@@ -826,6 +834,7 @@ member: ${yamlString(member || "")}
 owner_role: ${yamlString(metadata.ownerRole)}
 goal: ${yamlString(session.goal || "")}
 summary: ${yamlString(summary)}
+base_skill: ${yamlString(metadata.baseSkill)}
 reuse_when: ${yamlString(reuseWhen)}
 promotion_policy: ${yamlString(metadata.promotionPolicy)}
 promotion_reason: ${yamlString(metadata.promotionReason)}
@@ -847,7 +856,15 @@ ${frontmatterArtifacts}
 
 ${session.goal || "Not specified."}
 
-## Outcome Diff
+## Base Skill
+
+${renderNotes(grouped.base_skill)}
+
+## Skill Diff
+
+${renderNotes(grouped.skill_diff)}
+
+## Outcome Evidence
 
 ${outcomeParts.join("\n\n")}
 
@@ -886,6 +903,8 @@ ${diffBlocks || "No tracked artifact diff."}
 
 function groupNotes(notes) {
   const grouped = {
+    base_skill: [],
+    skill_diff: [],
     context: [],
     decision: [],
     constraint: [],
@@ -1270,13 +1289,14 @@ Use progressive disclosure:
 
 ### During the session
 
-Keep only outcome-changing context in \`.context-commit/SESSION.md\`:
+Keep only reusable Skill changes and their evidence in \`.context-commit/SESSION.md\`:
 
-- current facts that materially changed the work
-- decisions and constraints
-- meaningful user corrections and Prompt Trajectory
-- validation results
-- when the context will be useful again
+- the Base Skill or workflow being used
+- the condition that changed its logic
+- the step, exception, priority, or decision rule added, changed, or removed
+- the Prompt Trajectory that caused the change
+- outcome evidence and validation
+- when the Skill Diff will be useful again
 
 Maintain searchable metadata in the SESSION.md Metadata section:
 
@@ -1295,8 +1315,8 @@ After the result is validated, run:
 \`context-commit end --summary "<plain-language outcome>" --reuse-when "<when this context helps again>"\`
 
 This saves a visible, dated Markdown Prompt Commit in \`context-memory/\`.
-ContextCommit then evaluates the Outcome Diff, reusable causal context,
-validation, and sensitivity. Personal work stays local; reusable work becomes a
+ContextCommit then evaluates the Skill Diff, its causal context, outcome
+evidence, and sensitivity. Personal work stays local; reusable work becomes a
 team or organization candidate; validated low-risk work is published by the
 workspace promotion policy. Do not create a Prompt Commit for a trivial
 exchange or work with no reusable outcome.
@@ -1352,9 +1372,18 @@ raw conversation.
 
 <!-- One plain-language sentence describing the result. -->
 
-## Outcome
+## Base Skill
 
-<!-- What meaningfully changed beyond the automatic file diff? -->
+<!-- Which Skill, playbook, or workflow was the starting point? -->
+
+## Skill Diff
+
+<!-- Under what condition did the logic change, and what step, exception,
+priority, or decision rule was added, changed, or removed? -->
+
+## Outcome Evidence
+
+<!-- What changed in the result, and how do we know the Skill Diff helped? -->
 
 ## Context That Mattered
 
@@ -1408,6 +1437,8 @@ async function readSessionDraft(metaDir) {
 
 function mergeDraftNotes(session, draft) {
   const sectionTypes = {
+    "Base Skill": "base_skill",
+    "Skill Diff": "skill_diff",
     "Context That Mattered": "context",
     Decisions: "decision",
     Constraints: "constraint",
@@ -1458,13 +1489,16 @@ function buildCommitMetadata({
     grouped.validation.length > 0 ? "confirmed" : "working",
   );
   const causalNotes = [
+    ...grouped.base_skill,
+    ...grouped.skill_diff,
     ...grouped.context,
     ...grouped.decision,
     ...grouped.constraint,
     ...grouped.feedback,
     ...grouped.prompt,
   ];
-  const hasOutcomeDiff =
+  const hasReusableChange =
+    grouped.skill_diff.length > 0 ||
     changes.length > 0 ||
     Boolean(outcome) ||
     grouped.decision.length > 0 ||
@@ -1483,7 +1517,7 @@ function buildCommitMetadata({
 
   if (
     config.sharedMemoryDir &&
-    hasOutcomeDiff &&
+    hasReusableChange &&
     causalNotes.length > 0 &&
     reusable &&
     safeToShare
@@ -1492,26 +1526,27 @@ function buildCommitMetadata({
     if (validated) {
       lifecycle = "published";
       promotionReason =
-        "auto-published: reusable Outcome Diff with causal context and validation";
+        "auto-published: reusable Skill Diff with outcome evidence and validation";
     } else {
       lifecycle = "candidate";
       promotionReason =
-        "shared as candidate: reusable Outcome Diff needs validation";
+        "shared as candidate: reusable Skill Diff needs validation";
     }
   } else if (!safeToShare && config.sharedMemoryDir) {
     promotionReason = `kept local: sensitivity is ${sensitivity}`;
-  } else if (!hasOutcomeDiff) {
-    promotionReason = "discarded: no reusable Outcome Diff";
+  } else if (!hasReusableChange) {
+    promotionReason = "discarded: no reusable Skill Diff or outcome evidence";
   } else if (causalNotes.length === 0) {
     promotionReason = "kept local: no causal context was captured";
   }
   return {
-    save: hasOutcomeDiff,
+    save: hasReusableChange,
     visibility,
     lifecycle,
     ownerRole: config.team || "default",
-    promotionPolicy: config.promotionPolicy || "outcome-diff-v1",
+    promotionPolicy: config.promotionPolicy || "skill-diff-v1",
     promotionReason,
+    baseSkill: grouped.base_skill[0]?.text || "",
     topics,
     entities,
     contextTypes: [...new Set(contextTypes)],
@@ -1673,6 +1708,7 @@ function parseFrontmatter(content) {
     id: scalar("id"),
     summary: scalar("summary"),
     goal: scalar("goal"),
+    baseSkill: scalar("base_skill"),
     reuseWhen: scalar("reuse_when"),
     freshUntil: scalar("fresh_until"),
     endedAt: scalar("ended_at"),
@@ -1726,8 +1762,13 @@ function renderContextCard(content, source, maxLength) {
 - Reuse when: ${reuseWhen || "Not captured."}
 - Details: \`context-commit show "${source}"\`
 - Artifact diff: \`context-commit show "${source}" --section diff\``;
+  const skillDiff = extractSection(content, "Skill Diff");
+  const outcomeEvidence =
+    extractSection(content, "Outcome Evidence") ||
+    extractSection(content, "Outcome Diff");
   const sections = [
-    ["Outcome", extractSection(content, "Outcome Diff")],
+    ["Skill Diff", skillDiff],
+    ["Outcome Evidence", outcomeEvidence],
     ["Context", extractSection(content, "Context That Mattered")],
     ["Decisions", extractSection(content, "Decisions")],
     ["Constraints", extractSection(content, "Constraints")],
@@ -1922,6 +1963,6 @@ Usage:
   context-commit abandon --yes
 
 Note types:
-  context, decision, constraint, feedback, prompt, validation
+  context, decision, constraint, feedback, prompt, base_skill, skill_diff, validation
 `;
 }
