@@ -1,125 +1,94 @@
 # Organization memory
 
-ContextCommit separates the memory format from the storage system. Prompt
-Commits remain plain Markdown; the configured shared directory decides how an
-organization stores, governs, and distributes them.
+ContextCommit's core job is not session storage. It promotes reusable context
+from individual Agent work into durable organization memory.
 
-## Recommended architecture
+## Minimal promotion pipeline
 
 ```text
-Agent workspace
-  ├── local context-memory/       private durable copy
-  └── shared memory adapter
-        └── organization store    governed shared copy
+Agent session
+  → Outcome Diff evaluation
+  → personal / team / organization
+  → candidate / published
 ```
 
-The local copy is written first. Shared publication is a second, retryable
-step. New sessions retrieve relevant context from both locations and
-deduplicate Prompt Commits by ID.
+The built-in `outcome-diff-v1` policy uses signals already visible in the work:
 
-Shared Prompt Commits are append-only. ContextCommit does not rewrite a central
-shared index on every session, avoiding a multi-writer conflict on SharePoint,
-network drives, and Git working trees.
+- a changed artifact or an explicit decision/constraint
+- causal context such as a fact, correction, or rejected approach
+- a concrete `Reuse When`
+- validation evidence
+- sensitivity classification
 
-## Which shared store to choose
+No separate model, API, database, or per-session sharing prompt is required.
 
-| Store | Best for | Strengths | Tradeoffs |
-|---|---|---|---|
-| SharePoint document library | General enterprise rollout | Existing identity, access groups, retention, DLP, eDiscovery | Requires a synced or mounted folder in the current MVP |
-| Private Git repository | Engineering and Agent-development teams | Diff, review, branches, provenance, automation | Less accessible to non-developers; sensitive content needs careful controls |
-| Network drive | Small controlled pilot | Fastest setup, familiar permissions | Weak metadata, search, conflict handling, and version governance |
+## Automatic routing
 
-For a Microsoft 365 enterprise, use a **dedicated SharePoint document library**
-as the default organizational memory—not an individual's OneDrive folder and
-not a general-purpose team folder. Give each business domain an access group
-and retention policy.
+| Result | Location | Loaded by other Agents? |
+| --- | --- | --- |
+| No reusable Outcome Diff | Discarded | No |
+| Personal or sensitive context | Local `context-memory/` | No |
+| Reusable but not validated | Shared `inbox/` | No |
+| Reusable, validated, low-risk context | Shared `knowledge/` | Yes |
 
-For a software or Agent platform team, a **dedicated private Git repository**
-is often the better first store. Do not mix Prompt Commits into the product
-source repository; keep context access and code access independently
-governable.
+`internal` and `public` items may be promoted. `private`, `confidential`, and
+`restricted` items stay local. This metadata is a routing guard, not a security
+boundary; storage permissions still control access.
+
+## Workspace policy
+
+A shared path defaults to team promotion:
+
+```bash
+context-commit init --shared "/mounted/company-context" --team "payments"
+```
+
+An administrator can configure a workspace for organization-wide promotion:
+
+```bash
+context-commit init --shared "/mounted/company-context" \
+  --team "platform" --promotion-target organization
+```
+
+This keeps the decision out of each person's end-of-session workflow. Team and
+organization scope are workspace policy.
 
 ## Directory layout
 
-ContextCommit creates the shared structure automatically:
-
 ```text
 company-context/
-├── INDEX.md
-└── commits/
-    └── payments/
-        └── billing-service/
-            └── 2026-07-25/
-                └── alex-<session-id>-<summary>.md
+├── inbox/
+│   ├── team/<team>/<workspace>/<date>/<commit>.md
+│   └── organization/<workspace>/<date>/<commit>.md
+└── knowledge/
+    ├── team/<team>/<workspace>/<date>/<commit>.md
+    └── organization/<workspace>/<date>/<commit>.md
 ```
 
-The hierarchy is:
+Only `knowledge/team/<current-team>/` and `knowledge/organization/` are
+retrieved. Inbox candidates remain inspectable evidence but do not silently
+shape another person's Agent.
 
-```text
-team / workspace / date / member-session-summary
-```
+## Storage
 
-Agents retrieve shared commits only from their configured `team`. Use separate
-shared roots or storage permissions for hard access boundaries; the `team`
-field is a retrieval namespace, not a security control.
+Prompt Commits are plain Markdown, so the same contract works with:
 
-The Prompt Commit frontmatter also records `scope`, `team`, `member`,
-`workspace`, topics, entities, sensitivity, confidence, freshness, and status
-so the same files remain understandable and searchable across tools.
+- a dedicated SharePoint document library
+- a private Git repository for engineering teams
+- a controlled network drive for a pilot
 
-## Setup
-
-For a first test, point every participant at the same locally available folder.
-The path alone is enough:
-
-```bash
-context-commit init --shared "/mounted/company-context"
-```
-
-On Windows:
-
-```powershell
-context-commit init --shared "Z:\Company Context"
-```
-
-ContextCommit creates the shared structure and uses the default team namespace.
-Shared Prompt Commits default to `scope: team` and `sensitivity: internal`.
-These labels guide retrieval and review; they do not replace storage
-permissions.
-For separate team namespaces and explicit member names:
-
-```bash
-context-commit init \
-  --shared "/mounted/company-context" \
-  --team "payments" \
-  --member "alex"
-```
-
-Normal session completion publishes automatically. To retry or backfill local
-Prompt Commits:
-
-```bash
-context-commit sync
-```
-
-Initialization also installs project lifecycle hooks. Each participant should
-review and trust them in the Agent's `/hooks` browser, then verify:
-
-```bash
-context-commit hooks status
-```
+ContextCommit writes the local copy first. Shared publication is retryable with
+`context-commit sync`. Use separate roots or storage permissions for hard
+access boundaries; metadata is not access control.
 
 ## Governance before broad rollout
 
-1. Define which sensitivity classifications may be shared.
-2. Create domain-level access groups; avoid one company-wide read group.
-3. Require the Agent to exclude credentials, personal data, and raw
-   conversations.
-4. Assign owners for stale, superseded, conflicting, or incorrect Prompt
-   Commits.
-5. Set freshness, status, and retention rules.
-6. Pilot with one team and review commits before scaling.
+1. Set the promotion target and allowed sensitivity classes centrally.
+2. Assign ownership to a team or role, not only a person.
+3. Review Inbox candidates and false promotions during the pilot.
+4. Define how published knowledge is superseded or expired.
+5. Keep raw Agent sessions local; share only extracted Prompt Commits.
 
-Filesystem sharing is the current transport. Storage permissions remain the
-security boundary; ContextCommit keeps the Markdown contract independent of
-the selected shared folder.
+The v0.5 pipeline deliberately stops at trustworthy published Prompt Commits.
+Compiling many commits into canonical topic pages can be added later without
+turning the first version into a full knowledge-management platform.

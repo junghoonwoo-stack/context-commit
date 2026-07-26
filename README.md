@@ -62,6 +62,19 @@ Together, these form a **Prompt Commit**.
 When one person's Prompt Commit can sharpen many future Agent sessions, context
 starts to accumulate like compound interest. This is **Context Compounding**.
 
+Personal context is the visible starting point, not the product's main
+differentiator. The core is the automatic promotion pipeline:
+
+```text
+Agent session → Outcome Diff → personal / team / organization
+                              → candidate / published
+```
+
+The workspace policy—not a person's memory habit—decides the promotion target.
+Unvalidated reusable work goes to a shared Inbox. Only validated, low-risk
+context becomes published organization Knowledge and enters another person's
+Agent context.
+
 ### A concrete example
 
 Suppose a Coding Agent fixes duplicate records created by retried payment
@@ -111,8 +124,10 @@ and add a regression test for legacy records.
 ```
 
 The Agent works on the code and keeps only the outcome-changing context in
-`.context-commit/SESSION.md`. When meaningful work finishes, the session becomes
-a dated Prompt Commit under `context-memory/`.
+`.context-commit/SESSION.md`. When meaningful work finishes, ContextCommit
+evaluates the Outcome Diff, its causal context, validation, reuse condition, and
+sensitivity. It then discards noise, keeps personal context local, sends a
+reusable unvalidated item to the team Inbox, or publishes validated context.
 
 In a later Agent session, ask only:
 
@@ -361,7 +376,7 @@ These examples are not tied to one company, country, or industry. The same
 pattern works in a US startup repository, a Korean enterprise network drive, or
 an individual's local work folder.
 
-## Share memory with a team
+## Promote personal context into organization memory
 
 Point ContextCommit to one network or synchronized folder:
 
@@ -374,9 +389,15 @@ context-commit init --shared "/Volumes/Company Context"
 ```
 
 The path can be a network drive, synchronized SharePoint folder, or checked-out
-private Git directory. ContextCommit saves locally first and then copies the
-Prompt Commit to the shared folder. Other users pointing to the same location
-can retrieve the relevant team context.
+private Git directory. ContextCommit always saves locally first. It then applies
+the built-in `outcome-diff-v1` policy:
+
+- no reusable Outcome Diff → do not save
+- personal, sensitive, or weakly reusable context → keep local
+- reusable but unvalidated context → shared `inbox/`
+- reusable, validated, low-risk context → shared `knowledge/`
+
+Only `knowledge/` is injected into another person's Agent session.
 
 Add team and member names only when needed:
 
@@ -385,8 +406,22 @@ context-commit init --shared "/path/to/context" \
   --team "payments" --member "alex"
 ```
 
+For an organization-wide workspace, an administrator can set the policy once:
+
+```bash
+context-commit init --shared "/path/to/context" \
+  --team "platform" --promotion-target organization
+```
+
 See [Organization memory](docs/ORGANIZATION_MEMORY.md) for access control,
 folder layout, and synchronization notes.
+
+Agent session files can help recover or backfill the causal Prompt Trajectory,
+but they are input sources—not shared memory. `context-commit sources` detects
+known local roots using metadata only. It does not read, import, or share
+session contents. See [Agent session sources](docs/SESSION_SOURCES.md), whose
+path registry references
+[akm-eval runtime paths](https://github.com/johnfkoo951/akm-eval/blob/main/references/runtime-paths.md).
 
 ## Privacy and license
 
@@ -401,7 +436,8 @@ company memory created with ContextCommit do not have to be published.
 More details:
 [Prompt Commit format](docs/PROMPT_COMMIT_FORMAT.md) ·
 [Lifecycle hooks](docs/HOOKS.md) ·
-[Organization memory](docs/ORGANIZATION_MEMORY.md)
+[Organization memory](docs/ORGANIZATION_MEMORY.md) ·
+[Agent session sources](docs/SESSION_SOURCES.md)
 
 ---
 
@@ -471,6 +507,18 @@ ContextCommit은 재사용할 가치가 있는 Delta를 명시적으로 남깁�
 만들면, 맥락은 복리처럼 쌓이기 시작합니다. 이것이 **Context
 Compounding**입니다.
 
+개인 Context는 이 원리를 눈으로 확인하는 출발점이지, 제품의 핵심
+차별점은 아닙니다. 핵심은 자동 승격 흐름입니다.
+
+```text
+Agent 세션 → Outcome Diff → personal / team / organization
+                           → candidate / published
+```
+
+매번 개인이 공유 여부를 고르는 대신 Workspace 정책이 승격 범위를
+결정합니다. 검증되지 않은 재사용 가능 항목은 공유 Inbox에 두고, 검증된
+저위험 Context만 조직 Knowledge로 발행해 다른 사람의 Agent에 주입합니다.
+
 ### 구체적인 사례
 
 Coding Agent가 결제 Webhook 재전송으로 중복 레코드가 생기는 문제를
@@ -521,7 +569,9 @@ context-commit init
 
 Agent는 코드를 수정하면서 결과를 바꾼 맥락만
 `.context-commit/SESSION.md`에 유지합니다. 의미 있는 작업이 끝나면
-세션은 `context-memory/` 아래 날짜별 Prompt Commit으로 저장됩니다.
+ContextCommit이 Outcome Diff, 원인 맥락, 검증, 재사용 조건, 민감도를
+평가해 노이즈는 버리고 개인 저장·공유 후보·조직 Knowledge로 자동
+분류합니다.
 
 새로운 Agent 세션에서는 다음과 같이만 요청합니다.
 
@@ -769,7 +819,7 @@ Agent가 폴더 안에서 의미 있는 결과를 만들거나 수정하는 업�
 Repository, 한국 기업의 Network Drive, 개인의 Local 업무 폴더에서 같은
 패턴으로 사용할 수 있습니다.
 
-## 조직이 함께 사용하기
+## 개인 Context를 조직 Memory로 승격하기
 
 네트워크 또는 동기화 폴더 경로 하나만 지정합니다.
 
@@ -782,9 +832,15 @@ context-commit init --shared "/Volumes/Company Context"
 ```
 
 네트워크 드라이브, 동기화된 SharePoint 폴더, 체크아웃한 Private Git
-디렉터리를 사용할 수 있습니다. ContextCommit은 개인 폴더에 먼저 저장한
-뒤 공유 폴더에 Prompt Commit을 복사합니다. 같은 위치를 지정한 다른
-사용자는 관련된 조직 Context를 다음 세션에서 불러올 수 있습니다.
+디렉터리를 사용할 수 있습니다. ContextCommit은 항상 개인 폴더에 먼저
+저장한 뒤 `outcome-diff-v1` 정책을 자동 적용합니다.
+
+- 재사용할 Outcome Diff가 없음 → 저장하지 않음
+- 개인적이거나 민감하거나 재사용성이 낮음 → Local에만 저장
+- 재사용 가능하지만 검증되지 않음 → 공유 `inbox/`
+- 재사용 가능하고 검증된 저위험 Context → 공유 `knowledge/`
+
+다른 사람의 Agent에는 `knowledge/`만 자동 주입됩니다.
 
 필요한 경우에만 팀과 구성원 이름을 추가합니다.
 
@@ -793,9 +849,25 @@ context-commit init --shared "/path/to/context" \
   --team "payments" --member "minji"
 ```
 
+조직 전체에 적용할 Workspace는 관리자가 정책을 한 번 설정합니다.
+
+```bash
+context-commit init --shared "/path/to/context" \
+  --team "platform" --promotion-target organization
+```
+
 권한, 폴더 구조, 동기화 방식은
 [Organization memory](docs/ORGANIZATION_MEMORY.md)에서 확인할 수
 있습니다.
+
+Agent 세션 파일은 누락된 Prompt Trajectory를 복구하거나 과거 업무를
+Backfill하는 입력원으로 도움이 됩니다. 다만 그 자체가 공유 Memory는
+아닙니다. `context-commit sources`는 알려진 Local 경로의 메타데이터만
+탐지하며, 세션 내용을 읽거나 가져오거나 공유하지 않습니다. 자세한
+내용은 [Agent session sources](docs/SESSION_SOURCES.md)를 참고하십시오.
+경로 목록은
+[akm-eval runtime paths](https://github.com/johnfkoo951/akm-eval/blob/main/references/runtime-paths.md)를
+참고했습니다.
 
 ## 개인정보와 라이선스
 
@@ -811,4 +883,5 @@ Memory를 공개할 의무는 없습니다.
 더 보기:
 [Prompt Commit format](docs/PROMPT_COMMIT_FORMAT.md) ·
 [Lifecycle hooks](docs/HOOKS.md) ·
-[Organization memory](docs/ORGANIZATION_MEMORY.md)
+[Organization memory](docs/ORGANIZATION_MEMORY.md) ·
+[Agent session sources](docs/SESSION_SOURCES.md)

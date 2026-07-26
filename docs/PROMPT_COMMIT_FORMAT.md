@@ -1,104 +1,72 @@
 # Prompt Commit format
 
-ContextCommit stores durable memory as human-readable Markdown with YAML
-frontmatter. Version 2 separates the lightweight retrieval index from details
-and artifact diffs.
+ContextCommit stores durable context as human-readable Markdown. Version 3 adds
+automatic promotion metadata while keeping the body focused on the Outcome Diff
+and the causal Prompt Trajectory.
 
-## Progressive disclosure
-
-Future Agents should load context in three levels:
-
-1. **Index** — `.context-commit/CURRENT_CONTEXT.md` contains only the best
-   matching summaries, key decisions and constraints, freshness, and a source
-   pointer.
-2. **Details** — `context-commit show "<source>"` opens the full Prompt Commit
-   without its Artifact Diff.
-3. **Evidence** — `context-commit show "<source>" --section diff` opens exact
-   file changes only when they matter.
-
-Do not preload complete Prompt Commits or diffs. The original Markdown remains
-the source of truth and is never destructively compressed.
-
-## Version 2
+## Version 3
 
 ```markdown
 ---
-format: context-commit/v2
+format: context-commit/v3
 id: "2026-07-25T104218-abc12"
-started_at: "2026-07-25T01:40:00.000Z"
-ended_at: "2026-07-25T01:42:18.000Z"
-fresh_until: "2026-10-23T01:42:18.000Z"
 workspace: "billing-service"
-scope: "team"
+visibility: "team"
+lifecycle: "published"
 team: "payments"
 member: "alex"
+owner_role: "payments"
 goal: "Fix duplicate payment webhook processing"
 summary: "Made payment webhooks idempotent by event ID"
 reuse_when: "Implementing or reviewing payment webhook handlers"
+promotion_policy: "outcome-diff-v1"
+promotion_reason: "auto-published: reusable Outcome Diff with causal context and validation"
 topics:
   - "payments"
   - "webhooks"
-  - "idempotency"
-entities:
-  - "payment event ID"
-  - "invoice record"
-context_types:
-  - "context"
-  - "decision"
 sensitivity: "internal"
 confidence: "confirmed"
-status: "active"
 artifacts:
   - "src/webhooks/payment-handler.ts"
-  - "test/webhooks/payment-handler.test.ts"
 ---
 ```
 
-The Markdown body contains Outcome Diff, Context That Mattered, Decisions,
-Constraints, Prompt Trajectory, Validation, Reuse When, and Artifact Diff.
+The body contains:
 
-## Metadata rules
+- Outcome Diff
+- Context That Mattered
+- Decisions and Constraints
+- Prompt Trajectory
+- Validation
+- Reuse When
+- Artifact Diff
 
-Metadata exists to improve retrieval, freshness checks, ownership, and safe
-sharing. Unknown values should be left empty rather than guessed.
+## Promotion fields
 
-- `format`: schema identifier. New commits use `context-commit/v2`; v1 remains
-  readable.
-- `id`: immutable session ID used for deduplication.
-- `started_at`, `ended_at`: ISO 8601 timestamps.
-- `fresh_until`: review horizon, not an automatic deletion date. Stale context
-  can still be evidence but must be verified.
-- `workspace`: working-directory name where the outcome was produced.
-- `scope`: `personal` or `team`. This describes intended retrieval scope, not
-  filesystem authorization.
-- `team`: shared-memory namespace. Actual access is enforced by the shared
-  drive, SharePoint, or Git permissions.
-- `member`: person or Agent identity responsible for the commit.
-- `goal`: the task at session start.
-- `summary`: one plain-language sentence describing the outcome.
-- `reuse_when`: a concrete future situation in which retrieval is useful.
-- `topics`: one to five stable, specific nouns. Prefer `webhook-idempotency`
-  over generic tags such as `work`, `code`, `document`, or `AI`.
-- `entities`: exact names of products, projects, customers, systems, policies,
-  or regulations. Do not use broad categories.
-- `context_types`: derived from captured sections, such as `decision`,
-  `constraint`, `context`, `instruction`, and `validation`.
-- `sensitivity`: `private`, `public`, `internal`, `confidential`, or
-  `restricted`. Shared memory defaults to `internal`; personal memory defaults
-  to `private`.
-- `confidence`: `confirmed`, `working`, or `uncertain`. Use `confirmed` only
-  when validation evidence exists.
-- `status`: `active`, `superseded`, or `archived`. Superseded and archived
-  commits remain on disk but are excluded from default retrieval.
-- `artifacts`: paths changed during the session.
+- `visibility`: `personal`, `team`, or `organization`
+- `lifecycle`: `candidate`, `published`, `superseded`, `rejected`, or `expired`
+- `owner_role`: the durable team or role responsible for the context
+- `promotion_policy`: the deterministic policy version used
+- `promotion_reason`: why the item stayed local, became a candidate, or was
+  published
 
-Never include credentials, secrets, unnecessary personal data, or raw
-conversation text in metadata.
+Version 2 `scope` and `status` remain readable. New commits use Version 3.
+
+## Progressive disclosure
+
+Agents load context in three levels:
+
+1. `.context-commit/CURRENT_CONTEXT.md` — small relevant cards
+2. `context-commit show "<source>"` — full details without artifact diffs
+3. `context-commit show "<source>" --section diff` — exact file evidence
+
+Shared Inbox candidates are not retrieved. Published team and organization
+knowledge is retrieved before deeper evidence is opened.
 
 ## What is not a Prompt Commit
 
-- a full raw transcript
-- a generic summary with no outcome
+- a raw transcript
+- a generic session summary with no Outcome Diff
 - a list of every tool call
-- credentials or confidential personal data
-- context with no provenance or reuse condition
+- credentials or unnecessary personal data
+- context with no causal explanation or reuse condition

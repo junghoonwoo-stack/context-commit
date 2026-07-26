@@ -111,7 +111,7 @@ test("zero-config init installs one visible harness for every Skill", async () =
   }
 });
 
-test("a shared path alone creates company memory", async () => {
+test("a shared path automatically routes unvalidated outcomes to the team inbox", async () => {
   const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-company-"));
   const sharedMemory = await mkdtemp(
     path.join(tmpdir(), "context-commit-network-drive-"),
@@ -133,12 +133,20 @@ test("a shared path alone creates company memory", async () => {
     "Verified one-path company setup",
   ]);
 
-  assert.match(endOutput, /Shared Prompt Commit/);
+  assert.match(endOutput, /Shared candidate/);
+  assert.match(endOutput, /Classification: team \/ candidate/);
   const sharedFiles = await findMarkdownFiles(sharedMemory);
   assert.ok(
     sharedFiles.some((file) => path.basename(file) !== "INDEX.md"),
-    "expected a Prompt Commit in shared company memory",
+    "expected a candidate in shared company memory",
   );
+  const candidate = await readFile(
+    sharedFiles.find((file) => path.basename(file) !== "INDEX.md"),
+    "utf8",
+  );
+  assert.match(candidate, /visibility: "team"/);
+  assert.match(candidate, /lifecycle: "candidate"/);
+  assert.match(candidate, /promotion_policy: "outcome-diff-v1"/);
 });
 
 test("saves a dated Prompt Commit and loads it next session", async () => {
@@ -208,8 +216,9 @@ test("saves a dated Prompt Commit and loads it next session", async () => {
     "utf8",
   );
   assert.match(commit, /## Outcome Diff/);
-  assert.match(commit, /format: context-commit\/v2/);
-  assert.match(commit, /scope: "personal"/);
+  assert.match(commit, /format: context-commit\/v3/);
+  assert.match(commit, /visibility: "personal"/);
+  assert.match(commit, /lifecycle: "published"/);
   assert.match(commit, /sensitivity: "private"/);
   assert.match(commit, /confidence: "confirmed"/);
   assert.match(commit, /context_types:/);
@@ -421,12 +430,19 @@ test("shares Prompt Commits across workspaces through organization memory", asyn
     "decision",
     "Use a physician review before external reports are imported.",
   ]);
+  run(firstWorkspace, [
+    "note",
+    "--type",
+    "validation",
+    "The policy passed the care-team review checklist.",
+  ]);
   const endOutput = run(firstWorkspace, [
     "end",
     "--summary",
     "Defined clinic onboarding policy",
   ]);
-  assert.match(endOutput, /Shared Prompt Commit/);
+  assert.match(endOutput, /Published organization memory/);
+  assert.match(endOutput, /Classification: team \/ published/);
 
   const sharedFiles = await findMarkdownFiles(sharedMemory);
   const sharedCommitPath = sharedFiles.find(
@@ -434,6 +450,8 @@ test("shares Prompt Commits across workspaces through organization memory", asyn
   );
   assert.ok(sharedCommitPath);
   const sharedCommit = await readFile(sharedCommitPath, "utf8");
+  assert.match(sharedCommit, /visibility: "team"/);
+  assert.match(sharedCommit, /lifecycle: "published"/);
   assert.match(sharedCommit, /team: "care-team"/);
   assert.match(sharedCommit, /member: "alex"/);
   assert.match(sharedCommit, /Use a physician review/);
@@ -456,7 +474,7 @@ test("shares Prompt Commits across workspaces through organization memory", asyn
     path.join(secondWorkspace, ".context-commit", "CURRENT_CONTEXT.md"),
     "utf8",
   );
-  assert.match(context, /Source: `shared:/);
+  assert.match(context, /Source: `team:/);
   assert.match(context, /Defined clinic onboarding policy/);
   assert.match(context, /Use a physician review/);
 
@@ -476,6 +494,118 @@ test("shares Prompt Commits across workspaces through organization memory", asyn
     "utf8",
   );
   assert.doesNotMatch(otherTeamContext, /Defined clinic onboarding policy/);
+});
+
+test("team candidates are visible in the inbox but are not injected", async () => {
+  const sharedMemory = await mkdtemp(
+    path.join(tmpdir(), "context-commit-candidate-"),
+  );
+  const authorWorkspace = await mkdtemp(
+    path.join(tmpdir(), "context-commit-author-"),
+  );
+  const readerWorkspace = await mkdtemp(
+    path.join(tmpdir(), "context-commit-reader-"),
+  );
+
+  run(authorWorkspace, [
+    "init",
+    "--shared",
+    sharedMemory,
+    "--team",
+    "payments",
+  ]);
+  run(authorWorkspace, ["start", "--goal", "Choose the retry strategy"]);
+  run(authorWorkspace, [
+    "note",
+    "--type",
+    "decision",
+    "Use the provider event ID for retry deduplication.",
+  ]);
+  run(authorWorkspace, [
+    "end",
+    "--summary",
+    "Chose the retry deduplication key",
+    "--reuse-when",
+    "Implementing payment retries",
+  ]);
+
+  run(readerWorkspace, [
+    "init",
+    "--shared",
+    sharedMemory,
+    "--team",
+    "payments",
+  ]);
+  run(readerWorkspace, ["start", "--goal", "Implement payment retries"]);
+  const context = await readFile(
+    path.join(readerWorkspace, ".context-commit", "CURRENT_CONTEXT.md"),
+    "utf8",
+  );
+  assert.doesNotMatch(context, /provider event ID/);
+  assert.ok(
+    (await findMarkdownFiles(path.join(sharedMemory, "inbox"))).some(
+      (file) => path.basename(file) !== "INDEX.md",
+    ),
+  );
+});
+
+test("workspace policy can promote validated context organization-wide", async () => {
+  const sharedMemory = await mkdtemp(
+    path.join(tmpdir(), "context-commit-organization-"),
+  );
+  const workspace = await mkdtemp(
+    path.join(tmpdir(), "context-commit-policy-"),
+  );
+  run(workspace, [
+    "init",
+    "--shared",
+    sharedMemory,
+    "--team",
+    "platform",
+    "--promotion-target",
+    "organization",
+  ]);
+  run(workspace, ["start", "--goal", "Standardize API retry handling"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "decision",
+    "All external retry handlers need a stable idempotency key.",
+  ]);
+  run(workspace, [
+    "note",
+    "--type",
+    "validation",
+    "The platform architecture test suite passed.",
+  ]);
+  const output = run(workspace, [
+    "end",
+    "--summary",
+    "Standardized external retry handling",
+    "--reuse-when",
+    "Implementing any external retry handler",
+  ]);
+  assert.match(output, /Classification: organization \/ published/);
+  const published = await findMarkdownFiles(
+    path.join(sharedMemory, "knowledge", "organization"),
+  );
+  assert.ok(published.length > 0);
+});
+
+test("session source detection reads metadata only", async () => {
+  const fakeHome = await mkdtemp(path.join(tmpdir(), "context-commit-home-"));
+  await mkdir(path.join(fakeHome, ".claude", "projects"), { recursive: true });
+  await mkdir(path.join(fakeHome, ".codex", "sessions"), { recursive: true });
+  await writeFile(
+    path.join(fakeHome, ".codex", "sessions", "secret.jsonl"),
+    "must-not-be-printed",
+  );
+
+  const output = run(projectRoot, ["sources", "--home", fakeHome]);
+  assert.match(output, /Claude Code/);
+  assert.match(output, /Codex CLI/);
+  assert.match(output, /No session contents were read, imported, or shared/);
+  assert.doesNotMatch(output, /must-not-be-printed/);
 });
 
 async function findMarkdownFiles(root) {
