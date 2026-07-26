@@ -1,7 +1,7 @@
 {
   "name": "context-commit",
-  "version": "0.5.0",
-  "description": "Promote outcome-changing Agent context into reusable organization memory.",
+  "version": "0.6.0",
+  "description": "Capture Skill Diffs from Agent work and promote them into reusable organization memory.",
   "type": "module",
   "bin": {
     "context-commit": "./bin/context-commit.mjs",
