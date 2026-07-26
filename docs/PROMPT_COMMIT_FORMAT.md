@@ -4,6 +4,20 @@ ContextCommit stores durable context as human-readable Markdown. Version 3 adds
 automatic promotion metadata while keeping the body focused on the Outcome Diff
 and the causal Prompt Trajectory.
 
+## Why this is a knowledge unit
+
+A Prompt Commit is not a session summary. It is the smallest reusable record of
+how a person's task-specific context changed an outcome. The same structure
+works for code and product work:
+
+| Work | Outcome Diff | Causal Prompt Trajectory | Reuse When |
+| --- | --- | --- | --- |
+| Software | Webhook handling became idempotent | Stable provider event ID, out-of-order retries, API compatibility | Implementing another external webhook |
+| Product | Enterprise rollout gained an approval gate | Customer security requirement corrected the original rollout plan | Writing a PRD, proposal, or launch plan |
+
+When published, this unit no longer depends on the original person remaining in
+the team or being available to explain the decision.
+
 ## Version 3
 
 ```markdown
