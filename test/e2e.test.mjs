@@ -633,6 +633,36 @@ test("session source detection reads metadata only", async () => {
   assert.doesNotMatch(output, /must-not-be-printed/);
 });
 
+test("keeps outcome evidence local when no Skill Diff was captured", async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-outcome-only-"));
+  const sharedMemory = await mkdtemp(
+    path.join(tmpdir(), "context-commit-outcome-only-shared-"),
+  );
+  run(workspace, ["init", "--shared", sharedMemory]);
+  run(workspace, ["start", "--goal", "Finish a one-time analysis"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "decision",
+    "Use the corrected source total for this report.",
+  ]);
+  run(workspace, [
+    "note",
+    "--type",
+    "validation",
+    "The final total reconciled.",
+  ]);
+  const output = run(workspace, [
+    "end",
+    "--summary",
+    "Reconciled the one-time report",
+    "--reuse-when",
+    "Reviewing this report",
+  ]);
+  assert.match(output, /Classification: personal \/ published/);
+  assert.match(output, /kept local: no reusable Skill Diff was captured/);
+});
+
 test("captures a conditional logic change as a reusable Skill Diff", async () => {
   const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-skill-diff-"));
   run(workspace, ["init"]);
