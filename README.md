@@ -312,8 +312,8 @@ Goal: Summarize a customer interview for executive review
 
 Only the compact card enters the active context first.
 
-Only the compact card enters the active context first. The complete Prompt
-Commit and exact file diff stay on disk and are opened only when needed:
+The complete Prompt Commit and exact file diff stay on disk and are opened only
+when needed:
 
 ```text
 CURRENT_CONTEXT.md
