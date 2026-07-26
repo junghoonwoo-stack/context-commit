@@ -1,14 +1,20 @@
 # ContextCommit
 
-**Git stores what changed. ContextCommit stores the context that made it
-change.**
+**Turn tacit knowledge in individual prompts into reusable organizational memory.**
 
-AI Agents can finish code, a document, an analysis, a spreadsheet, or a
-presentation. But the decisions and corrections that made the result useful
-often disappear with the session.
+Git stores what changed. ContextCommit stores the context that made it change—and
+when that context should be reused.
 
-ContextCommit turns that small, reusable part of the work into visible Markdown
-and gives the relevant parts to the next Agent session.
+Every time a person makes an Agent's work sharper, they add local knowledge:
+a correction, a constraint, a recent fact, a rejected approach, or a decision.
+That tacit knowledge usually stays in one person's session.
+
+ContextCommit is a local-first framework that automates four steps:
+
+- **capture** the context that materially changed an outcome
+- **select** only the reusable delta instead of saving the full conversation
+- **promote** personal context into governed team or organization knowledge
+- **apply** relevant published knowledge in another person's Agent session
 
 ```bash
 npm install -g github:junghoonwoo-stack/context-commit
@@ -21,83 +27,67 @@ project hooks, open `/hooks` and approve the exact project commands.
 
 No separate LLM API, database, or model configuration is required.
 
-## Why ContextCommit exists
+## The gap between a Skill and real work
 
-### Where does an AI's sharpness come from?
+Organizations can distribute a standard `SKILL.md`, playbook, or workflow.
+But actual work immediately diverges from that baseline: new information arrives,
+a user corrects the Agent, a customer reacts, a constraint changes, or a better
+decision is made.
 
-A model may have learned from much of the world's public knowledge. It still
-does not automatically know the situation in front of you: the current goal,
-the constraint that changed this morning, the tradeoff your team already made,
-or the reaction that made you reconsider the plan.
+That gap between the standard Skill and the final outcome is where tacit
+knowledge appears. It is already expressed in prompts because each person wants
+a better result. Asking people to document and share it again rarely works.
 
-That is why even the best model or expert Skill still needs prompting. We add
-our intent, assumptions, constraints, corrections, and latest information.
-Humans are unusually good **context sensors**: experience, tone, reactions, and
-local conditions tell us what matters now. Prompting transfers those signals to
-the Agent.
+ContextCommit captures that delta as part of the work itself.
 
-Personal Agents such as OpenClaw, Claude Code, Codex, and Hermes Agent
-increasingly offer memory, persistent instructions, or local workspace files.
-After enough use, their answers can feel sharper because they know more of the
-user's working context.
+| Layer | What it helps with | What remains missing |
+| --- | --- | --- |
+| Agent session memory | Continue one person's work efficiently | Knowledge stays with that person or Agent |
+| Personal LLM Wiki | Organize information that may support future work | Information may never enter a real workflow |
+| ContextCommit | Promote outcome-changing context across people and Agents | Organization policy decides what may be shared |
 
-The harder problem is organizational:
+## The knowledge unit
 
-- the context each person injects is usually lost with the prompt
-- the final artifact shows what changed, but often not why
-- saving every transcript creates noise, cost, and privacy risk
-- one person's learning rarely improves the next person's Agent
-
-An organization therefore needs a shared memory layer that can turn useful
-individual Prompt Commits into common memory and automatically supply the
-relevant parts when another person starts an Agent session.
-
-ContextCommit makes the reusable delta explicit. It does not save the entire
-conversation. It keeps the **Outcome Diff** and the small **Prompt Trajectory**
-that caused it: the facts, decisions, constraints, corrections, and validation
-that materially changed the result.
-
-Together, these form a **Prompt Commit**.
-
-When one person's Prompt Commit can sharpen many future Agent sessions, context
-starts to accumulate like compound interest. This is **Context Compounding**.
-
-Personal context is the visible starting point, not the product's main
-differentiator. The core is the automatic promotion pipeline:
+ContextCommit does not save every prompt or transcript. It creates a
+**Prompt Commit** only when work contains a reusable change:
 
 ```text
-Agent session → Outcome Diff → personal / team / organization
-                              → candidate / published
+Prompt Commit = Outcome Diff + causal Prompt Trajectory + validation + Reuse When
 ```
 
-The workspace policy—not a person's memory habit—decides the promotion target.
-Unvalidated reusable work goes to a shared Inbox. Only validated, low-risk
-context becomes published organization Knowledge and enters another person's
-Agent context.
+- **Outcome Diff**: what materially changed in the artifact, decision, or action
+- **Prompt Trajectory**: the facts, corrections, constraints, and decisions that
+  caused the change
+- **Validation**: evidence that the result works
+- **Reuse When**: the condition under which another Agent should apply it
 
-### A concrete example
+```mermaid
+flowchart TD
+    A["Standard SKILL.md"] --> B["Person + Agent execute work"]
+    B --> C["Outcome Diff + Prompt Trajectory"]
+    C --> D{"Automatic policy"}
+    D -->|Personal| E["Local memory"]
+    D -->|Reusable candidate| F["Team inbox"]
+    D -->|Validated| G["Organization knowledge"]
+    F --> G
+    G --> B
+```
 
-Suppose a Coding Agent fixes duplicate records created by retried payment
-webhooks. During the work, you provide two details that are not obvious from
-the code:
+The workspace policy handles promotion. Noise is discarded, personal or
+sensitive context stays local, unvalidated reusable work goes to the team Inbox,
+and validated low-risk context becomes published Knowledge. Only published
+Knowledge is injected into another person's Agent session.
 
-- the provider may deliver the same event more than once and out of order
-- idempotency must use the provider's stable event ID without changing the
-  public API contract
+This creates **Context Compounding**: one person's work makes many future Agent
+sessions sharper without requiring that person to maintain a wiki or answer the
+same questions repeatedly.
 
-The merged code contains the fix, but the next developer may not know why this
-key was chosen or which compatibility constraint mattered. The chat contains
-the reasoning, but the next Coding Agent may never see it.
+## Two quick examples
 
-ContextCommit saves the smaller unit that should survive:
-
-- what meaningfully changed
-- which facts, decisions, constraints, and user corrections changed the result
-- how the result was validated
-- when that context should be reused
-
-The memory is not hidden inside a service. It is plain Markdown that people and
-Agents can read, edit, search, diff, move, or delete.
+| Role | Tacit knowledge captured during work | What the organization reuses |
+| --- | --- | --- |
+| Developer | “The provider retries events out of order. Use its stable event ID and preserve the public API contract.” | The next Coding Agent applies the same idempotency rule when adding refund webhooks. |
+| Product manager | “Enterprise rollout requires security approval before the pilot can expand.” | The next PRD or proposal Agent includes the approval gate without finding the original PM. |
 
 ## A first try
 
@@ -263,7 +253,6 @@ Topics: payments, webhooks, idempotency
 Entities: payment event ID, invoice record
 Sensitivity: internal
 Confidence: confirmed
-Status: active
 ```
 
 This is not a transcript. It is a small working memory of what changed the
@@ -443,15 +432,21 @@ More details:
 
 ## 왜 ContextCommit인가
 
-**Git이 무엇이 바뀌었는지를 저장한다면, ContextCommit은 왜 그렇게
-바뀌었는지를 저장합니다.**
+**개인의 Prompt에 담긴 암묵지를 재사용 가능한 조직 Memory로 전환합니다.**
 
-AI Agent는 코드, 문서, 분석, 기획안, 스프레드시트, 프레젠테이션을
-완성할 수 있습니다. 하지만 그 결과를 유용하게 만든 판단과 사용자 교정은
-세션이 끝나면 사라지기 쉽습니다.
+Git이 무엇이 바뀌었는지를 저장한다면, ContextCommit은 왜 바뀌었는지와
+그 맥락을 언제 다시 적용해야 하는지를 저장합니다.
 
-ContextCommit은 다음 업무에도 필요한 부분만 눈에 보이는 Markdown으로
-남기고, 다음 Agent 세션에 관련된 내용만 전달합니다.
+사람이 Agent의 결과를 뾰족하게 만들 때마다 교정, 제약조건, 최신 정보,
+버린 접근, 의사결정을 Prompt로 주입합니다. 이 암묵지는 대부분 한 사람의
+Agent 세션에만 남습니다.
+
+ContextCommit은 다음 네 단계를 자동화하는 Local-first Framework입니다.
+
+- 결과를 실제로 바꾼 Context를 **수집**
+- 전체 대화가 아닌 재사용 가능한 Delta만 **선별**
+- 개인 Context를 팀·조직 Knowledge로 **승격**
+- 관련된 Published Knowledge를 다른 사람의 Agent에 **적용**
 
 ```bash
 npm install -g github:junghoonwoo-stack/context-commit
@@ -465,83 +460,66 @@ Hook 승인이 필요할 때 `/hooks`를 열어 정확한 명령을 한 번 확�
 
 별도의 LLM API, 데이터베이스, 모델 설정은 필요하지 않습니다.
 
-## 왜 만들었는가
+## 표준 Skill과 실제 업무 사이
 
-### AI의 ‘뾰족함’은 어디서 오는가?
+조직은 표준 `SKILL.md`, Playbook, Workflow를 만들어 배포할 수 있습니다.
+그러나 실제 업무를 수행하는 순간 새로운 정보가 들어오고, 사용자가
+Agent를 교정하고, 고객이 반응하고, 제약조건과 의사결정이 달라집니다.
 
-AI는 전 세계의 방대한 지식을 학습했지만, 지금 내가 처한 상황까지
-자동으로 알지는 못합니다. 오늘 아침 바뀐 제약조건, 이미 검토하고 버린
-대안, 팀이 선택한 Trade-off, 상대방의 반응을 보고 달라진 판단은 모델
-안에 없습니다.
+표준 Skill과 최종 Outcome 사이의 이 차이에 개인의 암묵지가 생깁니다.
+구성원은 더 나은 결과를 얻기 위해 이미 이를 Prompt에 표현하고 있습니다.
+업무가 끝난 뒤 다시 정리하고 공유하라고 요구하는 방식은 잘 작동하지
+않습니다.
 
-그래서 아무리 뛰어난 모델이나 Guru의 Skill을 사용해도 우리는 추가로
-Prompting을 합니다. 목표, 가정, 제약조건, 최신 정보, 교정을 주입합니다.
-사람은 경험, 눈치, 반응, 분위기, 현장의 변화를 감지하는 뛰어난
-**Context Sensor**입니다. Prompting은 사람이 감지한 현재의 맥락을
-Agent에게 전달하는 과정입니다.
+ContextCommit은 업무 중 발생한 이 Delta를 그대로 수집합니다.
 
-OpenClaw, Claude Code, Codex, Hermes Agent 같은 개인용 Agent는 Memory,
-지속 가능한 지침, Local Workspace File을 점점 더 많이 제공합니다.
-Agent를 오래 사용할수록 사용자의 업무 맥락이 쌓여 답변이 어느 순간
-뾰족해지는 경험이 가능합니다.
+| Layer | 주된 역할 | 남는 한계 |
+| --- | --- | --- |
+| Agent Session Memory | 한 사람의 업무를 효율적으로 이어감 | 지식이 개인이나 특정 Agent에 머묾 |
+| Personal LLM Wiki | 당장 업무와 별도로 들어오는 정보를 체계화 | 실제 Workflow에 적용되지 않을 수 있음 |
+| ContextCommit | Outcome을 바꾼 Context를 사람과 Agent 사이에 승격·재사용 | 무엇을 공유할지는 조직 정책이 결정 |
 
-더 어려운 문제는 조직입니다.
+## 저장하는 지식 단위
 
-- 각 구성원이 Prompt에 넣은 중요한 맥락이 세션과 함께 사라짐
-- 최종 산출물에는 무엇이 바뀌었는지는 있지만 왜 바뀌었는지는 부족함
-- 전체 대화를 저장하면 잡음, 비용, 개인정보 위험이 커짐
-- 한 사람의 학습이 다른 사람의 Agent를 더 뾰족하게 만들지 못함
-
-따라서 조직은 개인의 유용한 Prompt Commit을 공용 Memory로 만들고, 다른
-구성원이 Agent Session을 시작할 때 관련된 부분을 자동으로 제공하는
-Shared Memory Layer가 필요합니다.
-
-ContextCommit은 재사용할 가치가 있는 Delta를 명시적으로 남깁니다. 긴
-대화 전체가 아니라 실제로 달라진 **Outcome Diff**와 그 변화를 만든
-작은 **Prompt Trajectory**를 저장합니다. 즉, 결과를 바꾼 사실, 결정,
-제약조건, 사용자 교정, 검증만 남깁니다.
-
-이 한 단위를 **Prompt Commit**이라고 합니다.
-
-한 사람의 Prompt Commit이 여러 사람의 다음 Agent 세션을 더 뾰족하게
-만들면, 맥락은 복리처럼 쌓이기 시작합니다. 이것이 **Context
-Compounding**입니다.
-
-개인 Context는 이 원리를 눈으로 확인하는 출발점이지, 제품의 핵심
-차별점은 아닙니다. 핵심은 자동 승격 흐름입니다.
+모든 Prompt나 대화를 저장하지 않습니다. 재사용할 변화가 있을 때만
+**Prompt Commit**을 만듭니다.
 
 ```text
-Agent 세션 → Outcome Diff → personal / team / organization
-                           → candidate / published
+Prompt Commit = Outcome Diff + 원인 Prompt Trajectory + 검증 + Reuse When
 ```
 
-매번 개인이 공유 여부를 고르는 대신 Workspace 정책이 승격 범위를
-결정합니다. 검증되지 않은 재사용 가능 항목은 공유 Inbox에 두고, 검증된
-저위험 Context만 조직 Knowledge로 발행해 다른 사람의 Agent에 주입합니다.
+- **Outcome Diff**: 산출물, 판단, 행동에서 실제로 달라진 것
+- **Prompt Trajectory**: 변화를 만든 사실, 교정, 제약조건, 의사결정
+- **Validation**: 결과가 작동한다는 근거
+- **Reuse When**: 다른 Agent가 이 Context를 적용해야 할 조건
 
-### 구체적인 사례
+```mermaid
+flowchart TD
+    A["표준 SKILL.md"] --> B["사람 + Agent가 업무 수행"]
+    B --> C["Outcome Diff + Prompt Trajectory"]
+    C --> D{"자동 정책"}
+    D -->|개인| E["Local Memory"]
+    D -->|재사용 후보| F["Team Inbox"]
+    D -->|검증 완료| G["Organization Knowledge"]
+    F --> G
+    G --> B
+```
 
-Coding Agent가 결제 Webhook 재전송으로 중복 레코드가 생기는 문제를
-수정한다고 가정해 보겠습니다. 작업 중 코드만으로는 알기 어려운 두 가지
-맥락을 사용자가 제공합니다.
+Workspace 정책이 승격을 결정합니다. 노이즈는 버리고, 개인적이거나 민감한
+Context는 Local에 남기고, 검증되지 않은 재사용 항목은 Team Inbox로,
+검증된 저위험 Context는 Published Knowledge로 보냅니다. 다른 사람의
+Agent에는 Published Knowledge만 자동 주입됩니다.
 
-- 결제사는 같은 Event를 여러 번, 순서가 바뀐 상태로 보낼 수 있음
-- 공개 API 계약은 바꾸지 않고 결제사가 제공하는 안정적인 Event ID를
-  멱등성 기준으로 사용해야 함
+이를 통해 한 사람의 업무가 여러 사람의 다음 Agent를 더 뾰족하게 만드는
+**Context Compounding**이 생깁니다. 구성원이 Wiki를 따로 관리하거나 같은
+질문에 반복해서 답하지 않아도 됩니다.
 
-병합된 코드에는 수정 결과가 있지만, 다음 개발자는 왜 이 Key를
-선택했는지, 어떤 호환성 제약이 중요했는지 알기 어렵습니다. 대화에는
-이유가 있지만 다음 Coding Agent가 그 대화를 본다는 보장도 없습니다.
+## 두 가지 사례
 
-ContextCommit은 다음 세션까지 살아남아야 할 작은 단위만 저장합니다.
-
-- 의미 있게 바뀐 결과
-- 결과를 바꾼 사실, 결정, 제약조건, 사용자 교정
-- 검증 방법
-- 미래에 다시 활용할 조건
-
-Memory는 보이지 않는 서비스 안에 갇히지 않습니다. 사람과 Agent가 직접
-읽고, 고치고, 검색하고, 비교하고, 옮기고, 지울 수 있는 Markdown입니다.
+| 역할 | 업무 중 수집된 암묵지 | 조직이 재사용하는 방식 |
+| --- | --- | --- |
+| 개발자 | “결제사는 Event를 순서가 바뀐 상태로 재전송한다. 안정적인 Event ID를 사용하고 공개 API 계약은 유지한다.” | 다음 Coding Agent가 Refund Webhook을 만들 때 같은 멱등성 원칙을 적용 |
+| PM | “Enterprise Pilot 확대 전 Security 승인이 필요하다.” | 다음 PRD·제안서 Agent가 원래 담당자를 찾지 않고 Approval Gate를 반영 |
 
 ## 처음 사용해 보기
 
@@ -707,7 +685,6 @@ Topics: payments, webhooks, idempotency
 Entities: payment event ID, invoice record
 Sensitivity: internal
 Confidence: confirmed
-Status: active
 ```
 
 이는 녹취록이나 전체 대화 요약이 아닙니다. 결과를 바꾼 것만 남기는 작은

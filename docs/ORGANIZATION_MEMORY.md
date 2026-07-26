@@ -1,15 +1,28 @@
 # Organization memory
 
-ContextCommit's core job is not session storage. It promotes reusable context
-from individual Agent work into durable organization memory.
+ContextCommit's core job is not session storage. It turns tacit knowledge that
+appears during individual Agent work into reusable organization memory.
+
+A standard Skill captures the known way of working. Real execution adds current
+facts, corrections, exceptions, and decisions. Those deltas often remain with
+the person who produced the latest result, which is why teams search for the
+right owner and lose context when people move or leave.
+
+ContextCommit makes collection, promotion, distribution, and application part
+of the Agent workflow.
 
 ## Minimal promotion pipeline
 
-```text
-Agent session
-  → Outcome Diff evaluation
-  → personal / team / organization
-  → candidate / published
+```mermaid
+flowchart TD
+    A["Standard Skill"] --> B["Individual Agent work"]
+    B --> C["Outcome Diff + causal context"]
+    C --> D{"Workspace policy"}
+    D -->|Personal| E["Local memory"]
+    D -->|Candidate| F["Shared inbox"]
+    D -->|Published| G["Organization knowledge"]
+    F --> G
+    G --> B
 ```
 
 The built-in `outcome-diff-v1` policy uses signals already visible in the work:
@@ -21,6 +34,7 @@ The built-in `outcome-diff-v1` policy uses signals already visible in the work:
 - sensitivity classification
 
 No separate model, API, database, or per-session sharing prompt is required.
+The user does the work; the policy handles the knowledge lifecycle.
 
 ## Automatic routing
 

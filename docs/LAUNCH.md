@@ -11,9 +11,8 @@ Show HN: ContextCommit – promote Agent work into organization memory
 AI coding agents are good at finishing a task, but the context that made the
 result correct often disappears with the session.
 
-I built ContextCommit, an Apache 2.0 local-first layer that detects reusable
-Outcome Diffs in individual Agent work and promotes them into team or
-organization memory.
+I built ContextCommit, an Apache 2.0 local-first framework that turns tacit
+knowledge inside individual prompts into reusable team or organization memory.
 
 It does not call an LLM or require an API key. It runs on top of Codex or Claude
 Code.
@@ -56,9 +55,9 @@ and lifecycle hook experience.
 Git preserves what changed. ContextCommit preserves the context that made it
 change.
 
-ContextCommit is an Apache 2.0, local-first promotion layer for Agent memory. It
-turns reusable Outcome Diffs from individual work into governed team or
-organization context through a visible Markdown policy.
+ContextCommit is an Apache 2.0, local-first framework that captures the context
+that changed an outcome, promotes it from personal to organization memory, and
+applies relevant published knowledge in future Agent sessions.
 
 The new progressive-disclosure flow loads only a compact index first. Full
 details and artifact diffs stay on disk and are opened only when needed.

@@ -1247,8 +1247,9 @@ function agentInstruction() {
   return `## ContextCommit
 
 These workspace-wide memory rules apply to every Skill and workflow used in
-this project. A Skill can define how to do the work, but it does not bypass this
-memory lifecycle.
+this project. Their purpose is to turn outcome-changing tacit knowledge from
+prompts into reusable team or organization context. A Skill can define how to do
+the work, but it does not bypass this memory lifecycle.
 
 ### Start meaningful work
 
