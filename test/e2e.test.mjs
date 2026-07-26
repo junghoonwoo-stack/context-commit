@@ -640,7 +640,9 @@ test("captures a conditional logic change as a reusable Skill Diff", async () =>
   ]);
 
   const files = await findMarkdownFiles(path.join(workspace, "context-memory"));
-  const commit = await readFile(files[0], "utf8");
+  const commitPath = files.find((file) => path.basename(file) !== "INDEX.md");
+  assert.ok(commitPath);
+  const commit = await readFile(commitPath, "utf8");
   assert.match(commit, /format: context-commit\/v4/);
   assert.match(commit, /base_skill: "customer-interview-summary"/);
   assert.match(commit, /## Skill Diff/);
