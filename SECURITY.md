@@ -8,6 +8,10 @@ information in public issues or example Prompt Commits.
 The built-in redaction covers only common inline secret patterns and is not a
 complete data-loss-prevention system.
 
+`context-commit sources` reads only filesystem metadata. Raw Agent sessions,
+SQLite databases, credentials, and authentication files are never copied to
+shared memory.
+
 Before configuring shared memory, confirm that the destination's access
 controls, retention policy, and data classification permit the context being
 stored. A synchronized folder is only a transport; ContextCommit does not
