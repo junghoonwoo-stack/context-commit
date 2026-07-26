@@ -1501,8 +1501,9 @@ function buildCommitMetadata({
     ...grouped.feedback,
     ...grouped.prompt,
   ];
+  const hasSkillDiff = grouped.skill_diff.length > 0;
   const hasReusableChange =
-    grouped.skill_diff.length > 0 ||
+    hasSkillDiff ||
     changes.length > 0 ||
     Boolean(outcome) ||
     grouped.decision.length > 0 ||
@@ -1521,7 +1522,7 @@ function buildCommitMetadata({
 
   if (
     config.sharedMemoryDir &&
-    hasReusableChange &&
+    hasSkillDiff &&
     causalNotes.length > 0 &&
     reusable &&
     safeToShare
@@ -1538,6 +1539,8 @@ function buildCommitMetadata({
     }
   } else if (!safeToShare && config.sharedMemoryDir) {
     promotionReason = `kept local: sensitivity is ${sensitivity}`;
+  } else if (!hasSkillDiff && config.sharedMemoryDir) {
+    promotionReason = "kept local: no reusable Skill Diff was captured";
   } else if (!hasReusableChange) {
     promotionReason = "discarded: no reusable Skill Diff or outcome evidence";
   } else if (causalNotes.length === 0) {
