@@ -44,7 +44,7 @@ ContextCommit captures that delta as part of the work itself.
 | --- | --- | --- |
 | Agent session memory | Continue one person's work efficiently | Knowledge stays with that person or Agent |
 | Personal LLM Wiki | Organize information that may support future work | Information may never enter a real workflow |
-| ContextCommit | Promote outcome-changing context across people and Agents | Organization policy decides what may be shared |
+| ContextCommit | Promote conditional Skill changes across people and Agents | Organization policy decides what may be shared |
 
 ## The knowledge unit
 
@@ -210,7 +210,7 @@ These workspace-wide memory rules apply to every Skill and workflow.
 
 ### During the session
 
-Keep only outcome-changing context in `.context-commit/SESSION.md`:
+Keep only reusable Skill changes and their evidence in `.context-commit/SESSION.md`:
 
 - the Base Skill or workflow
 - the condition that changed its logic
@@ -506,7 +506,7 @@ ContextCommit은 업무 중 발생한 이 Delta를 그대로 수집합니다.
 | --- | --- | --- |
 | Agent Session Memory | 한 사람의 업무를 효율적으로 이어감 | 지식이 개인이나 특정 Agent에 머묾 |
 | Personal LLM Wiki | 당장 업무와 별도로 들어오는 정보를 체계화 | 실제 Workflow에 적용되지 않을 수 있음 |
-| ContextCommit | Outcome을 바꾼 Context를 사람과 Agent 사이에 승격·재사용 | 무엇을 공유할지는 조직 정책이 결정 |
+| ContextCommit | 조건별 Skill 변화를 사람과 Agent 사이에 승격·재사용 | 무엇을 공유할지는 조직 정책이 결정 |
 
 ## Skill Diff: 저장하는 지식 단위
 
