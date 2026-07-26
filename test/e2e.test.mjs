@@ -111,7 +111,7 @@ test("zero-config init installs one visible harness for every Skill", async () =
   }
 });
 
-test("a shared path automatically routes unvalidated outcomes to the team inbox", async () => {
+test("a shared path routes an unvalidated Skill Diff to the team inbox", async () => {
   const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-company-"));
   const sharedMemory = await mkdtemp(
     path.join(tmpdir(), "context-commit-network-drive-"),
@@ -121,6 +121,12 @@ test("a shared path automatically routes unvalidated outcomes to the team inbox"
   assert.match(output, new RegExp(`Shared memory: ${escapeForRegex(sharedMemory)}`));
 
   run(workspace, ["start", "--goal", "Test the company memory layer"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "skill_diff",
+    "When a workspace uses company memory, route reusable unvalidated changes to the team inbox.",
+  ]);
   run(workspace, [
     "note",
     "--type",
@@ -146,7 +152,7 @@ test("a shared path automatically routes unvalidated outcomes to the team inbox"
   );
   assert.match(candidate, /visibility: "team"/);
   assert.match(candidate, /lifecycle: "candidate"/);
-  assert.match(candidate, /promotion_policy: "outcome-diff-v1"/);
+  assert.match(candidate, /promotion_policy: "skill-diff-v1"/);
 });
 
 test("saves a dated Prompt Commit and loads it next session", async () => {
@@ -183,7 +189,7 @@ test("saves a dated Prompt Commit and loads it next session", async () => {
     sessionDraftPath,
     sessionDraft
       .replace(
-        "<!-- What meaningfully changed beyond the automatic file diff? -->",
+        "<!-- What changed in the result, and how do we know the Skill Diff helped? -->",
         "The brief now prioritizes setup and ongoing care.",
       )
       .replace(
@@ -215,8 +221,9 @@ test("saves a dated Prompt Commit and loads it next session", async () => {
     path.join(workspace, "work-memory", dateFolder, commitFiles[0]),
     "utf8",
   );
-  assert.match(commit, /## Outcome Diff/);
-  assert.match(commit, /format: context-commit\/v3/);
+  assert.match(commit, /## Skill Diff/);
+  assert.match(commit, /## Outcome Evidence/);
+  assert.match(commit, /format: context-commit\/v4/);
   assert.match(commit, /visibility: "personal"/);
   assert.match(commit, /lifecycle: "published"/);
   assert.match(commit, /sensitivity: "private"/);
@@ -427,6 +434,12 @@ test("shares Prompt Commits across workspaces through organization memory", asyn
   run(firstWorkspace, [
     "note",
     "--type",
+    "skill_diff",
+    "When external reports are imported, add a physician review step before import.",
+  ]);
+  run(firstWorkspace, [
+    "note",
+    "--type",
     "decision",
     "Use a physician review before external reports are imported.",
   ]);
@@ -518,6 +531,12 @@ test("team candidates are visible in the inbox but are not injected", async () =
   run(authorWorkspace, [
     "note",
     "--type",
+    "skill_diff",
+    "When payment retries are implemented, use the provider event ID for deduplication.",
+  ]);
+  run(authorWorkspace, [
+    "note",
+    "--type",
     "decision",
     "Use the provider event ID for retry deduplication.",
   ]);
@@ -569,6 +588,12 @@ test("workspace policy can promote validated context organization-wide", async (
   run(workspace, [
     "note",
     "--type",
+    "skill_diff",
+    "When an external retry handler is added, require a stable idempotency key.",
+  ]);
+  run(workspace, [
+    "note",
+    "--type",
     "decision",
     "All external retry handlers need a stable idempotency key.",
   ]);
@@ -606,6 +631,78 @@ test("session source detection reads metadata only", async () => {
   assert.match(output, /Codex CLI/);
   assert.match(output, /No session contents were read, imported, or shared/);
   assert.doesNotMatch(output, /must-not-be-printed/);
+});
+
+test("keeps outcome evidence local when no Skill Diff was captured", async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-outcome-only-"));
+  const sharedMemory = await mkdtemp(
+    path.join(tmpdir(), "context-commit-outcome-only-shared-"),
+  );
+  run(workspace, ["init", "--shared", sharedMemory]);
+  run(workspace, ["start", "--goal", "Finish a one-time analysis"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "decision",
+    "Use the corrected source total for this report.",
+  ]);
+  run(workspace, [
+    "note",
+    "--type",
+    "validation",
+    "The final total reconciled.",
+  ]);
+  const output = run(workspace, [
+    "end",
+    "--summary",
+    "Reconciled the one-time report",
+    "--reuse-when",
+    "Reviewing this report",
+  ]);
+  assert.match(output, /Classification: personal \/ published/);
+  assert.match(output, /kept local: no reusable Skill Diff was captured/);
+});
+
+test("captures a conditional logic change as a reusable Skill Diff", async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-skill-diff-"));
+  run(workspace, ["init"]);
+  run(workspace, ["start", "--goal", "Summarize a customer interview"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "base_skill",
+    "customer-interview-summary",
+  ]);
+  run(workspace, [
+    "note",
+    "--type",
+    "skill_diff",
+    "When the audience is executive, lead with business impact and the decision needed; compress feature details.",
+  ]);
+  run(workspace, [
+    "note",
+    "--type",
+    "validation",
+    "The PM approved the executive brief.",
+  ]);
+  run(workspace, [
+    "end",
+    "--summary",
+    "Adapted the interview summary for executives",
+    "--reuse-when",
+    "Summarizing customer interviews for executives",
+  ]);
+
+  const files = await findMarkdownFiles(path.join(workspace, "context-memory"));
+  const commitPath = files.find((file) => path.basename(file) !== "INDEX.md");
+  assert.ok(commitPath);
+  const commit = await readFile(commitPath, "utf8");
+  assert.match(commit, /format: context-commit\/v4/);
+  assert.match(commit, /base_skill: "customer-interview-summary"/);
+  assert.match(commit, /## Skill Diff/);
+  assert.match(commit, /When the audience is executive/);
+  assert.match(commit, /## Outcome Evidence/);
+  assert.match(commit, /The PM approved the executive brief/);
 });
 
 async function findMarkdownFiles(root) {

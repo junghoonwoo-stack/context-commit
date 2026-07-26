@@ -49,9 +49,10 @@ Runs:
 context-commit hook session-end
 ```
 
-It evaluates the Outcome Diff and causal context. Noise is discarded, personal
-context stays local, reusable unvalidated context becomes a shared candidate,
-and validated low-risk context is published according to the workspace policy.
+It evaluates the Skill Diff, causal Prompt Trajectory, and outcome evidence.
+Noise is discarded, personal context stays local, reusable unvalidated changes
+become shared candidates, and validated low-risk changes are published according
+to the workspace policy.
 
 The Agent should still follow `AGENTS.md` or `CLAUDE.md`, maintain `SESSION.md`,
 validate the outcome, and explicitly run `context-commit end` when meaningful

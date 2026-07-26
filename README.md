@@ -11,8 +11,8 @@ That tacit knowledge usually stays in one person's session.
 
 ContextCommit is a local-first framework that automates four steps:
 
-- **capture** the context that materially changed an outcome
-- **select** only the reusable delta instead of saving the full conversation
+- **capture** new conditions and logic injected while a Skill is used
+- **select** only the reusable Skill Diff instead of saving the full conversation
 - **promote** personal context into governed team or organization knowledge
 - **apply** relevant published knowledge in another person's Agent session
 
@@ -44,113 +44,135 @@ ContextCommit captures that delta as part of the work itself.
 | --- | --- | --- |
 | Agent session memory | Continue one person's work efficiently | Knowledge stays with that person or Agent |
 | Personal LLM Wiki | Organize information that may support future work | Information may never enter a real workflow |
-| ContextCommit | Promote outcome-changing context across people and Agents | Organization policy decides what may be shared |
+| ContextCommit | Promote conditional Skill changes across people and Agents | Organization policy decides what may be shared |
 
 ## The knowledge unit
 
 ContextCommit does not save every prompt or transcript. It creates a
-**Prompt Commit** only when work contains a reusable change:
+**Prompt Commit** when a standard Skill changes during real work:
 
 ```text
-Prompt Commit = Outcome Diff + causal Prompt Trajectory + validation + Reuse When
+Prompt Commit = Skill Diff + Outcome Evidence + Reuse When
 ```
 
-- **Outcome Diff**: what materially changed in the artifact, decision, or action
-- **Prompt Trajectory**: the facts, corrections, constraints, and decisions that
-  caused the change
-- **Validation**: evidence that the result works
-- **Reuse When**: the condition under which another Agent should apply it
+- **Skill Diff**: the Base Skill, the condition that appeared, and the logic
+  added, changed, or removed
+- **Outcome Evidence**: the changed artifact, validation, or user approval that
+  shows the new logic helped
+- **Reuse When**: when another Agent should apply the Skill Diff
+- **Prompt Trajectory**: the correction, fact, or decision that explains where
+  the change came from
+
+A Skill Diff is more than a final result. It captures a new branch in the way
+work should be done:
+
+```text
+Base Skill
++ Condition
++ Logic change
+= Adapted workflow
+```
+
+The logic change may be a new exception, priority, decision rule, step, or
+removed step. At a low level these are IF–ELSE branches; ContextCommit makes
+their discovery, validation, promotion, and reuse automatic.
 
 ```mermaid
 flowchart TD
-    A["Standard SKILL.md"] --> B["Person + Agent execute work"]
-    B --> C["Outcome Diff + Prompt Trajectory"]
-    C --> D{"Automatic policy"}
-    D -->|Personal| E["Local memory"]
-    D -->|Reusable candidate| F["Team inbox"]
-    D -->|Validated| G["Organization knowledge"]
-    F --> G
-    G --> B
+    A["Standard SKILL.md"] --> B["Person + Agent do real work"]
+    B --> C["New condition or correction"]
+    C --> D["Skill Diff + Outcome Evidence"]
+    D --> E{"Promotion policy"}
+    E -->|Personal| F["Local memory"]
+    E -->|Candidate| G["Team inbox"]
+    E -->|Validated| H["Organization Skill memory"]
+    G --> H
+    H --> B
 ```
 
-The workspace policy handles promotion. Noise is discarded, personal or
-sensitive context stays local, unvalidated reusable work goes to the team Inbox,
-and validated low-risk context becomes published Knowledge. Only published
-Knowledge is injected into another person's Agent session.
-
-This creates **Context Compounding**: one person's work makes many future Agent
-sessions sharper without requiring that person to maintain a wiki or answer the
-same questions repeatedly.
+Only validated, low-risk Skill Diffs become published Knowledge and enter
+another person's Agent session. This creates **Context Compounding**: each
+person's work improves the shared Skill without asking them to maintain a wiki
+afterward.
 
 ## Two quick examples
 
-| Role | Tacit knowledge captured during work | What the organization reuses |
+| Base Skill | New condition | Skill Diff reused by the organization |
 | --- | --- | --- |
-| Developer | “The provider retries events out of order. Use its stable event ID and preserve the public API contract.” | The next Coding Agent applies the same idempotency rule when adding refund webhooks. |
-| Product manager | “Enterprise rollout requires security approval before the pilot can expand.” | The next PRD or proposal Agent includes the approval gate without finding the original PM. |
+| Customer interview summary | Audience is an executive | Put revenue, cost, churn, and the decision needed first; compress feature detail |
+| Incident update | Customer communication is required | Remove internal speculation, state customer impact, and include the next update time |
 
 ## A first try
 
 Create or open a normal work folder:
 
 ```bash
-mkdir billing-service
-cd billing-service
+mkdir customer-research
+cd customer-research
 context-commit init
 ```
 
 Start Codex or Claude Code in that folder and ask:
 
 ```text
-Fix the duplicate invoice records created when payment webhooks are retried.
+Use the customer-interview-summary Skill to summarize interview-notes.md.
 ```
 
 While reviewing the draft, add:
 
 ```text
-The provider can deliver the same event more than once and out of order.
-Use its stable event ID for idempotency, preserve the current API contract,
-and add a regression test for legacy records.
+This is for an executive review. When the audience is executive, put revenue,
+cost, churn, and the decision needed first. Compress detailed feature requests.
 ```
 
-The Agent works on the code and keeps only the outcome-changing context in
-`.context-commit/SESSION.md`. When meaningful work finishes, ContextCommit
-evaluates the Outcome Diff, its causal context, validation, reuse condition, and
-sensitivity. It then discards noise, keeps personal context local, sends a
-reusable unvalidated item to the team Inbox, or publishes validated context.
-
-In a later Agent session, ask only:
+The Agent records the reusable change in `.context-commit/SESSION.md`:
 
 ```text
-Add support for refund webhooks.
+Base Skill: customer-interview-summary
+Condition: audience = executive
+Logic change: business impact and decision first; feature detail compressed
+Outcome Evidence: PM approved the final executive brief
 ```
 
-ContextCommit prepares a small `.context-commit/CURRENT_CONTEXT.md` containing
-the relevant prior decision. You do not have to repeat the event-ID,
-out-of-order delivery, or compatibility constraints.
+ContextCommit saves the **Skill Diff**, not the full conversation. It keeps a
+personal change local, routes an unvalidated reusable change to the team Inbox,
+or publishes a validated low-risk change as organization Knowledge.
+
+In a later Agent session, another PM asks only:
+
+```text
+Summarize this customer interview for the executive review.
+```
+
+ContextCommit prepares `.context-commit/CURRENT_CONTEXT.md` with the relevant
+published Skill Diff. The Agent applies the executive branch without finding the
+original PM or repeating the correction.
 
 Hooks normally handle the lifecycle. Manual commands remain available:
 
 ```bash
-context-commit start --goal "Fix duplicate webhook processing"
-context-commit end --summary "Made payment webhooks idempotent by event ID"
+context-commit start --goal "Summarize a customer interview"
+context-commit note --type base_skill "customer-interview-summary"
+context-commit note --type skill_diff "When audience is executive, lead with business impact and the decision needed."
+context-commit end --summary "Adapted the summary for executives" \
+  --reuse-when "Summarizing customer interviews for executives"
 ```
 
-See [Lifecycle hooks](docs/HOOKS.md) for the optional manual and troubleshooting
+See [Lifecycle hooks](docs/HOOKS.md) for optional manual and troubleshooting
 details.
 
 ## What appears in the folder
 
 ```text
-billing-service/
+customer-research/
 ├── AGENTS.md
 ├── CLAUDE.md
-├── src/
-├── test/
+├── interview-notes.md
+├── executive-brief.md
 ├── context-memory/
 │   ├── INDEX.md
 │   └── 2026-07-25/
-│       └── 10-42-18-made-payment-webhooks-idempotent.md
+│       └── 10-42-18-adapted-interview-summary-for-executives.md
 ├── .context-commit/
 │   ├── config.json
 │   ├── CURRENT_CONTEXT.md
@@ -188,20 +210,20 @@ These workspace-wide memory rules apply to every Skill and workflow.
 
 ### During the session
 
-Keep only outcome-changing context in `.context-commit/SESSION.md`:
+Keep only reusable Skill changes and their evidence in `.context-commit/SESSION.md`:
 
-- decisions and constraints
-- current facts that materially changed the work
-- meaningful user corrections
-- validation results
-- when the context will be useful again
+- the Base Skill or workflow
+- the condition that changed its logic
+- the step, exception, priority, or decision rule added, changed, or removed
+- outcome evidence and validation
+- when the Skill Diff will be useful again
 
 Do not record raw conversations, credentials, or unnecessary personal data.
 
 ### Finish meaningful work
 
 After validation, save a Prompt Commit. Do not create one for a trivial
-exchange or work with no reusable outcome.
+exchange or work with no reusable Skill Diff or outcome evidence.
 ```
 
 This is the harness. A team can inspect and adapt these rules directly instead
@@ -216,72 +238,79 @@ The Agent maintains a structured draft during the work:
 ```markdown
 # Active ContextCommit Session
 
-Goal: Fix duplicate payment webhook processing
+Goal: Summarize a customer interview for executive review
 
 ## Summary
 
-Made webhook processing idempotent while preserving the public API contract.
+Adapted the standard interview summary for an executive audience.
 
-## Context That Mattered
+## Base Skill
 
-- The provider can deliver the same event more than once and out of order.
-- Existing records may not contain the new idempotency key.
+- customer-interview-summary
 
-## Decisions
+## Skill Diff
 
-- Use the provider's stable event ID as the idempotency key.
-- Add a database uniqueness constraint and use an idempotent upsert.
-- Preserve compatibility for legacy records and the current API contract.
+- Condition: audience = executive
+- Logic change: lead with revenue, cost, churn, and the decision needed
+- Logic change: compress detailed feature requests
+
+## Outcome Evidence
+
+- The PM approved the final executive brief.
 
 ## Prompt Trajectory
 
-- The user corrected the initial timestamp-based deduplication approach.
-- The user added the legacy-record compatibility constraint.
+- The user corrected the general-purpose summary after identifying the audience.
 
 ## Validation
 
-- Added tests for duplicate, delayed, and out-of-order delivery.
-- Verified the existing API contract and migration path.
+- Confirmed the brief contains business impact, evidence, and a clear decision.
 
 ## Reuse When
 
-- Implementing or reviewing payment webhook handlers.
+- Summarizing customer interviews for executives.
 
 ## Metadata
 
-Topics: payments, webhooks, idempotency
-Entities: payment event ID, invoice record
+Topics: customer research, executive brief
+Entities: customer-interview-summary
 Sensitivity: internal
 Confidence: confirmed
 ```
 
-This is not a transcript. It is a small working memory of what changed the
-outcome.
+This is not a transcript or an ever-growing list of exceptions. It is one
+reusable conditional change to a shared Skill.
 
 ## What `CURRENT_CONTEXT.md` looks like
 
-At the start of the next task, ContextCommit selects relevant Prompt Commits and
-creates lightweight cards:
+At the start of the next task, ContextCommit selects relevant published Skill
+Diffs and creates lightweight cards:
 
 ```markdown
 # Current Context
 
-Goal: Add support for refund webhooks
+Goal: Summarize a customer interview for executive review
 
-## Made payment webhooks idempotent by event ID
+## Adapted interview summaries for executives
 
-- Source: `local:2026-07-25/10-42-18-made-webhooks-idempotent.md`
-- Metadata: topics: payments, webhooks, idempotency ·
+- Source: `organization:customer-research/2026-07-26/adapted-interview-summary.md`
+- Metadata: topics: customer research, executive brief ·
   confidence: confirmed · sensitivity: internal
-- Reuse when: Implementing or reviewing payment webhook handlers.
-- Details: `context-commit show "local:2026-07-25/10-42-18-made-webhooks-idempotent.md"`
-- Artifact diff: `context-commit show "local:2026-07-25/10-42-18-made-webhooks-idempotent.md" --section diff`
+- Reuse when: Summarizing customer interviews for executives.
+- Details: `context-commit show "organization:customer-research/2026-07-26/adapted-interview-summary.md"`
 
-### Decisions
+### Skill Diff
 
-- Use the provider's stable event ID as the idempotency key.
-- Preserve compatibility for legacy records and the current API contract.
+- Condition: audience = executive
+- Lead with revenue, cost, churn, and the decision needed.
+- Compress detailed feature requests.
+
+### Outcome Evidence
+
+- The PM approved the final executive brief.
 ```
+
+Only the compact card enters the active context first.
 
 Only the compact card enters the active context first. The complete Prompt
 Commit and exact file diff stay on disk and are opened only when needed:
@@ -350,8 +379,8 @@ folder:
 - recruiting, onboarding, and internal communications
 - competitive research and due diligence
 
-The work product can change from one session to the next. The reusable unit is
-the context that made the work correct.
+The work product can change from one session to the next. The reusable unit is the Skill Diff that made the workflow work better under a
+specific condition.
 
 | Work | Context worth committing |
 | --- | --- |
@@ -379,10 +408,10 @@ context-commit init --shared "/Volumes/Company Context"
 
 The path can be a network drive, synchronized SharePoint folder, or checked-out
 private Git directory. ContextCommit always saves locally first. It then applies
-the built-in `outcome-diff-v1` policy:
+the built-in `skill-diff-v1` policy:
 
-- no reusable Outcome Diff → do not save
-- personal, sensitive, or weakly reusable context → keep local
+- no reusable Skill Diff or outcome evidence → do not save
+- outcome evidence without a Skill Diff, or personal/sensitive context → keep local
 - reusable but unvalidated context → shared `inbox/`
 - reusable, validated, low-risk context → shared `knowledge/`
 
@@ -477,113 +506,131 @@ ContextCommit은 업무 중 발생한 이 Delta를 그대로 수집합니다.
 | --- | --- | --- |
 | Agent Session Memory | 한 사람의 업무를 효율적으로 이어감 | 지식이 개인이나 특정 Agent에 머묾 |
 | Personal LLM Wiki | 당장 업무와 별도로 들어오는 정보를 체계화 | 실제 Workflow에 적용되지 않을 수 있음 |
-| ContextCommit | Outcome을 바꾼 Context를 사람과 Agent 사이에 승격·재사용 | 무엇을 공유할지는 조직 정책이 결정 |
+| ContextCommit | 조건별 Skill 변화를 사람과 Agent 사이에 승격·재사용 | 무엇을 공유할지는 조직 정책이 결정 |
 
-## 저장하는 지식 단위
+## Skill Diff: 저장하는 지식 단위
 
-모든 Prompt나 대화를 저장하지 않습니다. 재사용할 변화가 있을 때만
-**Prompt Commit**을 만듭니다.
+모든 Prompt나 대화를 저장하지 않습니다. 표준 Skill이 실제 업무 중
+달라졌을 때만 **Prompt Commit**을 만듭니다.
 
 ```text
-Prompt Commit = Outcome Diff + 원인 Prompt Trajectory + 검증 + Reuse When
+Prompt Commit = Skill Diff + Outcome Evidence + Reuse When
 ```
 
-- **Outcome Diff**: 산출물, 판단, 행동에서 실제로 달라진 것
-- **Prompt Trajectory**: 변화를 만든 사실, 교정, 제약조건, 의사결정
-- **Validation**: 결과가 작동한다는 근거
-- **Reuse When**: 다른 Agent가 이 Context를 적용해야 할 조건
+- **Skill Diff**: 어떤 Base Skill에 어떤 조건이 생겼고, 로직이 어떻게
+  추가·변경·삭제되었는지
+- **Outcome Evidence**: 산출물 변화, 검증, 사용자 승인 등 새 로직이
+  유효했음을 보여주는 근거
+- **Reuse When**: 다른 Agent가 이 Skill Diff를 적용할 조건
+- **Prompt Trajectory**: 변화의 출처가 된 교정, 사실, 의사결정
+
+```text
+Base Skill
++ Condition
++ Logic change
+= 상황에 맞게 변형된 Workflow
+```
+
+Logic change는 예외 추가, 우선순위 변경, 판단 기준 변경, 단계 추가·삭제일
+수 있습니다. 낮은 수준에서는 IF–ELSE가 늘어나는 것이지만,
+ContextCommit은 그 조건의 발견·검증·승격·재사용을 자동화합니다.
 
 ```mermaid
 flowchart TD
-    A["표준 SKILL.md"] --> B["사람 + Agent가 업무 수행"]
-    B --> C["Outcome Diff + Prompt Trajectory"]
-    C --> D{"자동 정책"}
-    D -->|개인| E["Local Memory"]
-    D -->|재사용 후보| F["Team Inbox"]
-    D -->|검증 완료| G["Organization Knowledge"]
-    F --> G
-    G --> B
+    A["표준 SKILL.md"] --> B["사람 + Agent가 실제 업무 수행"]
+    B --> C["새 조건 또는 사용자 교정"]
+    C --> D["Skill Diff + Outcome Evidence"]
+    D --> E{"승격 정책"}
+    E -->|개인| F["Local Memory"]
+    E -->|후보| G["Team Inbox"]
+    E -->|검증 완료| H["조직 Skill Memory"]
+    G --> H
+    H --> B
 ```
 
-Workspace 정책이 승격을 결정합니다. 노이즈는 버리고, 개인적이거나 민감한
-Context는 Local에 남기고, 검증되지 않은 재사용 항목은 Team Inbox로,
-검증된 저위험 Context는 Published Knowledge로 보냅니다. 다른 사람의
-Agent에는 Published Knowledge만 자동 주입됩니다.
-
-이를 통해 한 사람의 업무가 여러 사람의 다음 Agent를 더 뾰족하게 만드는
-**Context Compounding**이 생깁니다. 구성원이 Wiki를 따로 관리하거나 같은
-질문에 반복해서 답하지 않아도 됩니다.
+검증된 저위험 Skill Diff만 Published Knowledge가 되어 다른 사람의 Agent에
+주입됩니다. 구성원이 업무 후 Wiki를 따로 관리하지 않아도, 한 사람의
+경험이 공용 Skill을 계속 개선하는 **Context Compounding**이 생깁니다.
 
 ## 두 가지 사례
 
-| 역할 | 업무 중 수집된 암묵지 | 조직이 재사용하는 방식 |
+| Base Skill | 새로 발견된 조건 | 조직이 재사용하는 Skill Diff |
 | --- | --- | --- |
-| 개발자 | “결제사는 Event를 순서가 바뀐 상태로 재전송한다. 안정적인 Event ID를 사용하고 공개 API 계약은 유지한다.” | 다음 Coding Agent가 Refund Webhook을 만들 때 같은 멱등성 원칙을 적용 |
-| PM | “Enterprise Pilot 확대 전 Security 승인이 필요하다.” | 다음 PRD·제안서 Agent가 원래 담당자를 찾지 않고 Approval Gate를 반영 |
+| 고객 인터뷰 요약 | 독자가 임원 | 매출·비용·이탈 영향과 필요한 의사결정을 먼저 제시하고 기능 세부사항은 축약 |
+| 장애 상황 공유 | 고객에게 전달하는 문서 | 내부 추측은 제거하고 고객 영향과 다음 업데이트 시간을 명시 |
 
 ## 처음 사용해 보기
 
-일반 업무 폴더를 만들거나 기존 폴더를 엽니다.
+일반 업무 폴더를 만들거나 엽니다.
 
 ```bash
-mkdir billing-service
-cd billing-service
+mkdir customer-research
+cd customer-research
 context-commit init
 ```
 
-해당 폴더에서 Codex 또는 Claude Code를 시작하고 요청합니다.
+Codex 또는 Claude Code를 시작하고 요청합니다.
 
 ```text
-결제 Webhook 재전송 시 중복 Invoice가 생성되는 문제를 수정해줘.
+customer-interview-summary Skill을 사용해 interview-notes.md를 요약해줘.
 ```
 
-초안을 검토하며 다음과 같이 교정합니다.
+초안을 검토하며 다음 조건을 추가합니다.
 
 ```text
-결제사는 같은 Event를 여러 번, 순서가 바뀐 상태로 보낼 수 있어.
-안정적인 Event ID를 멱등성 기준으로 사용하고, 현재 공개 API 계약은
-유지해. 기존 레코드에 대한 Regression Test도 추가해줘.
+이번 문서는 임원 보고용이야. 독자가 임원이면 매출·비용·고객 이탈 영향과
+필요한 의사결정을 먼저 보여줘. 세부 기능 요청은 줄여줘.
 ```
 
-Agent는 코드를 수정하면서 결과를 바꾼 맥락만
-`.context-commit/SESSION.md`에 유지합니다. 의미 있는 작업이 끝나면
-ContextCommit이 Outcome Diff, 원인 맥락, 검증, 재사용 조건, 민감도를
-평가해 노이즈는 버리고 개인 저장·공유 후보·조직 Knowledge로 자동
-분류합니다.
-
-새로운 Agent 세션에서는 다음과 같이만 요청합니다.
+Agent는 `.context-commit/SESSION.md`에 재사용할 변화만 남깁니다.
 
 ```text
-Refund Webhook 지원을 추가해줘.
+Base Skill: customer-interview-summary
+Condition: audience = executive
+Logic change: 사업 영향과 의사결정을 먼저 제시, 기능 세부사항 축약
+Outcome Evidence: PM이 최종 임원 보고용 요약을 승인
 ```
 
-ContextCommit은 이전 결정을 담은 작은
-`.context-commit/CURRENT_CONTEXT.md`를 준비합니다. 사용자는 Event ID,
-순서가 바뀐 재전송, 기존 API 호환성 제약을 다시 설명하지 않아도 됩니다.
+ContextCommit은 전체 대화가 아니라 **Skill Diff**를 저장합니다. 개인적
+변화는 Local에 두고, 검증 전 재사용 후보는 Team Inbox로, 검증된 저위험
+변화는 조직 Knowledge로 승격합니다.
 
-Hook이 일반적인 시작과 종료를 처리합니다. 필요하면 직접 실행할 수도
+이후 다른 PM은 다음과 같이만 요청합니다.
+
+```text
+이 고객 인터뷰를 임원 보고용으로 요약해줘.
+```
+
+ContextCommit이 관련 Published Skill Diff를
+`.context-commit/CURRENT_CONTEXT.md`에 준비합니다. 원래 담당자를 찾거나
+같은 교정을 반복하지 않아도 Agent가 임원용 분기를 적용합니다.
+
+Hook이 Lifecycle을 자동 처리합니다. 필요하면 수동 명령도 사용할 수
 있습니다.
 
 ```bash
-context-commit start --goal "Webhook 중복 처리 수정"
-context-commit end --summary "Event ID 기반으로 결제 Webhook 멱등성 확보"
+context-commit start --goal "고객 인터뷰 요약"
+context-commit note --type base_skill "customer-interview-summary"
+context-commit note --type skill_diff "독자가 임원이면 사업 영향과 의사결정을 먼저 제시"
+context-commit end --summary "임원용 요약 로직 적용" \
+  --reuse-when "고객 인터뷰를 임원 보고용으로 요약할 때"
 ```
 
-Hook의 수동 사용과 문제 해결은 [Lifecycle hooks](docs/HOOKS.md)에서
-확인할 수 있습니다.
+자세한 수동 사용법과 문제 해결은 [Lifecycle hooks](docs/HOOKS.md)를
+참고하십시오.
 
 ## 생성되는 폴더와 파일
 
 ```text
-billing-service/
+customer-research/
 ├── AGENTS.md
 ├── CLAUDE.md
-├── src/
-├── test/
+├── interview-notes.md
+├── executive-brief.md
 ├── context-memory/
 │   ├── INDEX.md
 │   └── 2026-07-25/
-│       └── 10-42-18-결제-webhook-멱등성-확보.md
+│       └── 10-42-18-임원용-인터뷰-요약-로직.md
 ├── .context-commit/
 │   ├── config.json
 │   ├── CURRENT_CONTEXT.md
@@ -643,77 +690,84 @@ Skill과 업무 흐름에 공통으로 적용됩니다.
 
 ## `SESSION.md` 사례
 
-Agent는 작업 중 구조화된 초안을 유지합니다.
+업무 중 Agent가 다음 구조를 유지합니다.
 
 ```markdown
 # Active ContextCommit Session
 
-Goal: 결제 Webhook 중복 처리 수정
+Goal: 고객 인터뷰 임원 보고용 요약
 
 ## Summary
 
-공개 API 계약을 유지하면서 Webhook 처리를 멱등하게 수정함.
+일반 고객 인터뷰 요약 Skill을 임원 독자에 맞게 변형함.
 
-## Context That Mattered
+## Base Skill
 
-- 결제사는 동일 Event를 여러 번, 순서가 바뀐 상태로 보낼 수 있음.
-- 기존 레코드에는 새로운 멱등성 Key가 없을 수 있음.
+- customer-interview-summary
 
-## Decisions
+## Skill Diff
 
-- 결제사가 제공하는 안정적인 Event ID를 멱등성 Key로 사용함.
-- Database Unique Constraint와 Idempotent Upsert를 함께 적용함.
-- 기존 레코드와 현재 공개 API 계약의 호환성을 유지함.
+- Condition: audience = executive
+- Logic change: 매출·비용·이탈 영향과 필요한 의사결정을 먼저 제시
+- Logic change: 세부 기능 요청은 축약
+
+## Outcome Evidence
+
+- PM이 최종 임원 보고용 요약을 승인함.
 
 ## Prompt Trajectory
 
-- 사용자가 Timestamp 기반 중복 제거 방식을 Event ID 기준으로 교정함.
-- 기존 레코드 호환성 제약을 추가함.
+- 사용자가 초안 검토 중 독자가 임원임을 명시하고 구조를 교정함.
 
 ## Validation
 
-- 중복, 지연, 순서 변경 Event에 대한 Test를 추가함.
-- 기존 API 계약과 Migration 경로를 확인함.
+- 사업 영향, 근거 발언, 의사결정 사항이 포함됐는지 확인함.
 
 ## Reuse When
 
-- 결제 Webhook Handler를 구현하거나 Review할 때.
+- 고객 인터뷰를 임원 보고용으로 요약할 때.
 
 ## Metadata
 
-Topics: payments, webhooks, idempotency
-Entities: payment event ID, invoice record
+Topics: 고객 조사, 임원 보고
+Entities: customer-interview-summary
 Sensitivity: internal
 Confidence: confirmed
 ```
 
-이는 녹취록이나 전체 대화 요약이 아닙니다. 결과를 바꾼 것만 남기는 작은
-작업 Memory입니다.
+전체 대화나 무한히 늘어나는 예외 목록이 아니라, 공용 Skill에 적용할 수
+있는 하나의 조건부 변화입니다.
 
 ## `CURRENT_CONTEXT.md` 사례
 
-다음 업무가 시작되면 ContextCommit은 관련 Prompt Commit을 찾아 작은
+다음 업무가 시작되면 ContextCommit은 관련 Published Skill Diff를 찾아 작은
 카드로 취합합니다.
 
 ```markdown
 # Current Context
 
-Goal: Refund Webhook 지원 추가
+Goal: 고객 인터뷰 임원 보고용 요약
 
-## Event ID 기반으로 결제 Webhook 멱등성 확보
+## 임원용 인터뷰 요약 로직
 
-- Source: `local:2026-07-25/10-42-18-webhook-멱등성-확보.md`
-- Metadata: topics: payments, webhooks, idempotency ·
+- Source: `organization:customer-research/2026-07-26/임원용-인터뷰-요약.md`
+- Metadata: topics: 고객 조사, 임원 보고 ·
   confidence: confirmed · sensitivity: internal
-- Reuse when: 결제 Webhook Handler를 구현하거나 Review할 때
-- Details: `context-commit show "local:2026-07-25/10-42-18-webhook-멱등성-확보.md"`
-- Artifact diff: `context-commit show "local:2026-07-25/10-42-18-webhook-멱등성-확보.md" --section diff`
+- Reuse when: 고객 인터뷰를 임원 보고용으로 요약할 때
+- Details: `context-commit show "organization:customer-research/2026-07-26/임원용-인터뷰-요약.md"`
 
-### Decisions
+### Skill Diff
 
-- 결제사가 제공하는 안정적인 Event ID를 멱등성 Key로 사용함.
-- 기존 레코드와 현재 공개 API 계약의 호환성을 유지함.
+- Condition: audience = executive
+- 매출·비용·이탈 영향과 필요한 의사결정을 먼저 제시
+- 세부 기능 요청은 축약
+
+### Outcome Evidence
+
+- PM이 최종 임원 보고용 요약을 승인함.
 ```
+
+처음에는 이 작은 카드만 Agent의 활성 Context에 들어갑니다.
 
 처음에는 이 작은 카드만 Agent의 활성 Context에 들어갑니다. 전체 Prompt
 Commit과 실제 파일 Diff는 디스크에 보존되며 필요할 때만 엽니다.
@@ -810,10 +864,10 @@ context-commit init --shared "/Volumes/Company Context"
 
 네트워크 드라이브, 동기화된 SharePoint 폴더, 체크아웃한 Private Git
 디렉터리를 사용할 수 있습니다. ContextCommit은 항상 개인 폴더에 먼저
-저장한 뒤 `outcome-diff-v1` 정책을 자동 적용합니다.
+저장한 뒤 `skill-diff-v1` 정책을 자동 적용합니다.
 
-- 재사용할 Outcome Diff가 없음 → 저장하지 않음
-- 개인적이거나 민감하거나 재사용성이 낮음 → Local에만 저장
+- 재사용할 Skill Diff가 없음 → 저장하지 않음
+- Skill Diff 없는 결과 근거 또는 개인적·민감한 Context → Local에만 저장
 - 재사용 가능하지만 검증되지 않음 → 공유 `inbox/`
 - 재사용 가능하고 검증된 저위험 Context → 공유 `knowledge/`
 

@@ -4,32 +4,36 @@
 
 **Title**
 
-Show HN: ContextCommit – promote Agent work into organization memory
+Show HN: ContextCommit – capture Skill Diffs from Agent work
 
 **Post**
 
-AI coding agents are good at finishing a task, but the context that made the
-result correct often disappears with the session.
+Organizations can distribute a standard `SKILL.md`, but real work adds new
+conditions, exceptions, priorities, and decision rules. Those changes are
+usually trapped in one person's Agent session.
 
-I built ContextCommit, an Apache 2.0 local-first framework that turns tacit
-knowledge inside individual prompts into reusable team or organization memory.
+I built ContextCommit, an Apache 2.0 local-first framework that captures the
+**Skill Diff** between the standard workflow and what actually worked, then
+promotes validated changes into team or organization memory.
 
-It does not call an LLM or require an API key. It runs on top of Codex or Claude
-Code.
+A Prompt Commit contains:
 
-The memory harness is visible in AGENTS.md and CLAUDE.md, applies across every
-Skill in the workspace, and uses lifecycle hooks for automatic start, context
-injection, and finalization.
+```text
+Skill Diff + Outcome Evidence + Reuse When
+```
 
-Its `outcome-diff-v1` policy automatically discards noise, keeps personal or
-sensitive context local, routes unvalidated reusable work to an Inbox, and
-publishes only validated low-risk context for other Agents.
+For example, a customer-interview summary starts as a general workflow. When the
+audience is an executive, a PM teaches the Agent to lead with business impact
+and the decision needed, while compressing feature detail. Once validated, that
+conditional branch can be applied by another PM's Agent automatically.
 
-It also uses progressive disclosure: the Agent first sees a small context
-index, opens full details only when needed, and loads artifact diffs only when
-exact evidence matters. In the E2E test, 9,102 characters of complete Prompt
-Commits become a 1,530-character current context while the originals remain
-editable Markdown.
+The harness is visible in AGENTS.md and CLAUDE.md and uses lifecycle hooks for
+automatic start, context injection, and finalization. Its `skill-diff-v1`
+policy discards noise, keeps personal or sensitive changes local, routes
+unvalidated reusable changes to an Inbox, and publishes validated low-risk
+changes for other Agents.
+
+No LLM API. No database. No opaque memory.
 
 Try it:
 
@@ -39,7 +43,7 @@ cd your-project
 context-commit init
 ```
 
-For a team, point it at a network drive or synchronized SharePoint folder:
+For a team:
 
 ```bash
 context-commit init --shared "/path/to/company-context"
@@ -47,21 +51,18 @@ context-commit init --shared "/path/to/company-context"
 
 Repository: https://github.com/junghoonwoo-stack/context-commit
 
-I would especially value feedback on the metadata schema, retrieval behavior,
+I would especially value feedback on the Skill Diff schema, promotion policy,
 and lifecycle hook experience.
 
 ## Short post
 
-Git preserves what changed. ContextCommit preserves the context that made it
-change.
+A standard Skill captures the known workflow. Real work adds conditions,
+exceptions, priorities, and decisions.
 
-ContextCommit is an Apache 2.0, local-first framework that captures the context
-that changed an outcome, promotes it from personal to organization memory, and
-applies relevant published knowledge in future Agent sessions.
+ContextCommit captures that **Skill Diff**, keeps the evidence that it worked,
+promotes reusable changes from personal to organization memory, and applies
+published changes in future Agent sessions.
 
-The new progressive-disclosure flow loads only a compact index first. Full
-details and artifact diffs stay on disk and are opened only when needed.
-
-No LLM API. No database. No opaque memory.
+No LLM API. No database. Plain Markdown.
 
 https://github.com/junghoonwoo-stack/context-commit
