@@ -146,7 +146,7 @@ test("a shared path automatically routes unvalidated outcomes to the team inbox"
   );
   assert.match(candidate, /visibility: "team"/);
   assert.match(candidate, /lifecycle: "candidate"/);
-  assert.match(candidate, /promotion_policy: "outcome-diff-v1"/);
+  assert.match(candidate, /promotion_policy: "skill-diff-v1"/);
 });
 
 test("saves a dated Prompt Commit and loads it next session", async () => {
@@ -215,8 +215,9 @@ test("saves a dated Prompt Commit and loads it next session", async () => {
     path.join(workspace, "work-memory", dateFolder, commitFiles[0]),
     "utf8",
   );
-  assert.match(commit, /## Outcome Diff/);
-  assert.match(commit, /format: context-commit\/v3/);
+  assert.match(commit, /## Skill Diff/);
+  assert.match(commit, /## Outcome Evidence/);
+  assert.match(commit, /format: context-commit\/v4/);
   assert.match(commit, /visibility: "personal"/);
   assert.match(commit, /lifecycle: "published"/);
   assert.match(commit, /sensitivity: "private"/);
@@ -606,6 +607,46 @@ test("session source detection reads metadata only", async () => {
   assert.match(output, /Codex CLI/);
   assert.match(output, /No session contents were read, imported, or shared/);
   assert.doesNotMatch(output, /must-not-be-printed/);
+});
+
+test("captures a conditional logic change as a reusable Skill Diff", async () => {
+  const workspace = await mkdtemp(path.join(tmpdir(), "context-commit-skill-diff-"));
+  run(workspace, ["init"]);
+  run(workspace, ["start", "--goal", "Summarize a customer interview"]);
+  run(workspace, [
+    "note",
+    "--type",
+    "base_skill",
+    "customer-interview-summary",
+  ]);
+  run(workspace, [
+    "note",
+    "--type",
+    "skill_diff",
+    "When the audience is executive, lead with business impact and the decision needed; compress feature details.",
+  ]);
+  run(workspace, [
+    "note",
+    "--type",
+    "validation",
+    "The PM approved the executive brief.",
+  ]);
+  run(workspace, [
+    "end",
+    "--summary",
+    "Adapted the interview summary for executives",
+    "--reuse-when",
+    "Summarizing customer interviews for executives",
+  ]);
+
+  const files = await findMarkdownFiles(path.join(workspace, "context-memory"));
+  const commit = await readFile(files[0], "utf8");
+  assert.match(commit, /format: context-commit\/v4/);
+  assert.match(commit, /base_skill: "customer-interview-summary"/);
+  assert.match(commit, /## Skill Diff/);
+  assert.match(commit, /When the audience is executive/);
+  assert.match(commit, /## Outcome Evidence/);
+  assert.match(commit, /The PM approved the executive brief/);
 });
 
 async function findMarkdownFiles(root) {
