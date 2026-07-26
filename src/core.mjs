@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
 import path from "node:path";
 
 const META_DIR = ".context-commit";
@@ -16,12 +17,12 @@ const CONFIG_FILE = "config.json";
 const CURRENT_FILE = "current.json";
 const CONTEXT_FILE = "CURRENT_CONTEXT.md";
 const SESSION_FILE = "SESSION.md";
-const FORMAT_VERSION = "context-commit/v2";
-const PACKAGE_VERSION = "0.4.0";
+const FORMAT_VERSION = "context-commit/v3";
+const PACKAGE_VERSION = "0.5.0";
 const DEFAULT_CONTEXT_ITEMS = 5;
 const DEFAULT_CONTEXT_ITEM_CHARS = 1400;
 const DEFAULT_CONFIG = {
-  version: 2,
+  version: 3,
   memoryDir: "context-memory",
   sharedMemoryDir: null,
   team: "default",
@@ -33,6 +34,8 @@ const DEFAULT_CONFIG = {
   freshDays: 90,
   agent: "all",
   hooks: true,
+  promotionTarget: "team",
+  promotionPolicy: "outcome-diff-v1",
 };
 const IGNORED_NAMES = new Set([
   ".git",
@@ -68,6 +71,8 @@ export async function runCli(argv, io = console) {
       return runHook(options, io);
     case "sync":
       return syncSharedMemory(options, io);
+    case "sources":
+      return showSessionSources(options, io);
     case "status":
       return showStatus(io);
     case "abandon":
@@ -101,6 +106,11 @@ async function initWorkspace(options, io) {
     member: options.member || process.env.USER || process.env.USERNAME || null,
     agent: options.agent || DEFAULT_CONFIG.agent,
     hooks: options.hooks !== "false" && !options["no-hooks"],
+    promotionTarget: normalizeChoice(
+      options["promotion-target"],
+      ["team", "organization"],
+      DEFAULT_CONFIG.promotionTarget,
+    ),
   };
 
   await mkdir(metaDir, { recursive: true });
@@ -119,6 +129,11 @@ async function initWorkspace(options, io) {
         options.hooks === "false" || options["no-hooks"]
           ? false
           : previous.hooks ?? config.hooks,
+      promotionTarget: normalizeChoice(
+        options["promotion-target"] || previous.promotionTarget,
+        ["team", "organization"],
+        DEFAULT_CONFIG.promotionTarget,
+      ),
     });
   }
 
@@ -144,6 +159,9 @@ async function initWorkspace(options, io) {
   );
   io.log(`Agent adapter: ${config.agent}`);
   io.log(`Lifecycle hooks: ${config.hooks ? "installed" : "disabled"}`);
+  if (config.sharedMemoryDir) {
+    io.log(`Promotion target: ${config.promotionTarget}`);
+  }
   if (config.hooks) {
     io.log("Review and trust project hooks in your Agent's hook browser.");
   }
@@ -272,7 +290,20 @@ async function endSession(options, io) {
     sessionDraft,
     session,
     config,
+    changes,
+    outcome,
+    reuseWhen,
   });
+  if (!metadata.save) {
+    await rm(path.join(metaDir, "runtime", session.id), {
+      recursive: true,
+      force: true,
+    });
+    await rm(currentPath, { force: true });
+    await rm(path.join(metaDir, SESSION_FILE), { force: true });
+    io.log("No Prompt Commit saved: no reusable Outcome Diff was detected.");
+    return null;
+  }
   const freshDays = Number(options["fresh-days"] || config.freshDays);
   const memoryDir = resolveMemoryDir(root, config);
   const dayDir = path.join(memoryDir, localDate(endedAt));
@@ -296,7 +327,7 @@ async function endSession(options, io) {
   await writeFile(commitPath, markdown);
   await updateIndex(root, config);
   let sharedResult = null;
-  if (config.sharedMemoryDir) {
+  if (config.sharedMemoryDir && metadata.visibility !== "personal") {
     try {
       sharedResult = await syncOneCommit(root, config, commitPath);
     } catch (error) {
@@ -315,8 +346,15 @@ async function endSession(options, io) {
 
   io.log(`Prompt Commit saved: ${commitPath}`);
   if (sharedResult?.copied) {
-    io.log(`Shared Prompt Commit: ${sharedResult.destination}`);
+    io.log(
+      metadata.lifecycle === "candidate"
+        ? `Shared candidate: ${sharedResult.destination}`
+        : `Published organization memory: ${sharedResult.destination}`,
+    );
   }
+  io.log(
+    `Classification: ${metadata.visibility} / ${metadata.lifecycle} (${metadata.promotionReason})`,
+  );
   io.log(
     `Outcome Diff: ${changes.filter((change) => change.kind !== "unchanged").length} changed artifacts`,
   );
@@ -479,7 +517,7 @@ async function syncSharedMemory(options, io) {
     });
     if (result.copied) copied += 1;
   }
-  io.log(`Shared memory synchronized: ${copied} new Prompt Commits`);
+  io.log(`Shared memory synchronized: ${copied} promoted Prompt Commits`);
   io.log(`Shared memory: ${resolveSharedMemoryDir(root, config)}`);
   return copied;
 }
@@ -494,10 +532,15 @@ async function showStatus(io) {
   io.log(`Prompt Commits: ${memoryFiles.length}`);
   if (config.sharedMemoryDir) {
     const sharedDir = resolveSharedMemoryDir(root, config);
-    const sharedFiles = await listMemoryFiles(resolveSharedReadDir(root, config));
+    const sharedFiles = (
+      await Promise.all(
+        resolveSharedReadDirs(root, config).map(({ dir }) => listMemoryFiles(dir)),
+      )
+    ).flat();
     io.log(`Shared memory: ${sharedDir}`);
-    io.log(`Shared Prompt Commits: ${sharedFiles.length}`);
+    io.log(`Published shared context: ${sharedFiles.length}`);
     io.log(`Team: ${config.team}`);
+    io.log(`Promotion target: ${config.promotionTarget}`);
     io.log(`Member: ${config.member || "(not set)"}`);
   } else {
     io.log("Shared memory: not configured");
@@ -510,6 +553,49 @@ async function showStatus(io) {
   } else {
     io.log("Active session: none");
   }
+}
+
+async function showSessionSources(options, io) {
+  const home = path.resolve(options.home || homedir());
+  const root = path.resolve(options.dir || process.cwd());
+  const candidates = [
+    ["Claude Code", path.join(home, ".claude", "projects"), "sessions"],
+    ["Codex CLI", path.join(home, ".codex", "sessions"), "sessions"],
+    ["Hermes Agent", path.join(home, ".hermes", "state.db"), "sqlite"],
+    ["Hermes Agent legacy", path.join(home, ".hermes", "sessions"), "sessions"],
+    ["OpenClaw", path.join(home, ".openclaw", "agents"), "sqlite"],
+    ["OpenClaw memory", path.join(home, ".openclaw", "workspace", "memory"), "memory"],
+    ["OpenCode", path.join(home, ".local", "share", "opencode"), "sessions"],
+    ["Goose", path.join(home, ".local", "share", "goose", "sessions"), "sessions"],
+    ["Goose", path.join(home, ".config", "goose", "sessions"), "sessions"],
+    ["Aider", path.join(root, ".aider.chat.history.md"), "session"],
+  ];
+  const found = [];
+  for (const [runtime, location, kind] of candidates) {
+    if (!(await exists(location))) continue;
+    const info = await stat(location);
+    found.push({
+      runtime,
+      location,
+      kind,
+      size: info.isFile() ? info.size : null,
+      modifiedAt: info.mtime.toISOString(),
+    });
+  }
+  io.log("Detected local Agent session sources (metadata only):");
+  if (found.length === 0) {
+    io.log("None of the known source roots were found.");
+  } else {
+    for (const item of found) {
+      io.log(
+        `- ${item.runtime}: ${item.location} (${item.kind}, modified ${item.modifiedAt}${
+          item.size === null ? "" : `, ${item.size} bytes`
+        })`,
+      );
+    }
+  }
+  io.log("No session contents were read, imported, or shared.");
+  return found;
 }
 
 async function abandonSession(options, io) {
@@ -733,12 +819,16 @@ started_at: ${yamlString(session.startedAt)}
 ended_at: ${yamlString(endedAt.toISOString())}
 fresh_until: ${yamlString(freshUntil.toISOString())}
 workspace: ${yamlString(path.basename(root))}
-scope: ${yamlString(metadata.scope)}
+visibility: ${yamlString(metadata.visibility)}
+lifecycle: ${yamlString(metadata.lifecycle)}
 team: ${yamlString(team || "default")}
 member: ${yamlString(member || "")}
+owner_role: ${yamlString(metadata.ownerRole)}
 goal: ${yamlString(session.goal || "")}
 summary: ${yamlString(summary)}
 reuse_when: ${yamlString(reuseWhen)}
+promotion_policy: ${yamlString(metadata.promotionPolicy)}
+promotion_reason: ${yamlString(metadata.promotionReason)}
 topics:
 ${frontmatterTopics}
 entities:
@@ -747,7 +837,6 @@ context_types:
 ${frontmatterContextTypes}
 sensitivity: ${yamlString(metadata.sensitivity)}
 confidence: ${yamlString(metadata.confidence)}
-status: ${yamlString(metadata.status)}
 artifacts:
 ${frontmatterArtifacts}
 ---
@@ -819,10 +908,7 @@ async function buildCurrentContext(root, config, goal) {
     { label: "local", dir: memoryDir },
   ];
   if (config.sharedMemoryDir) {
-    sources.push({
-      label: "shared",
-      dir: resolveSharedReadDir(root, config),
-    });
+    sources.push(...resolveSharedReadDirs(root, config));
   }
   const candidates = [];
   for (const source of sources) {
@@ -840,7 +926,14 @@ async function buildCurrentContext(root, config, goal) {
     if (seen.has(id)) continue;
     seen.add(id);
     const metadata = parseFrontmatter(content);
-    if (["superseded", "archived"].includes(metadata.status)) continue;
+    if (
+      ["superseded", "archived", "rejected", "expired"].includes(
+        metadata.lifecycle,
+      ) ||
+      (candidate.label !== "local" && metadata.lifecycle !== "published")
+    ) {
+      continue;
+    }
     ranked.push({
       ...candidate,
       content,
@@ -984,6 +1077,10 @@ async function syncOneCommit(
 ) {
   const sharedRoot = resolveSharedMemoryDir(root, config);
   const content = await readFile(commitPath, "utf8");
+  const metadata = parseFrontmatter(content);
+  if (metadata.visibility === "personal") {
+    return { copied: false, skipped: "personal", destination: null };
+  }
   const id =
     content.match(/^id:\s*(.+)$/m)?.[1]?.replace(/^["']|["']$/g, "") ||
     path.basename(commitPath, ".md");
@@ -993,12 +1090,18 @@ async function syncOneCommit(
   const workspace =
     content.match(/^workspace:\s*(.+)$/m)?.[1]?.replace(/^["']|["']$/g, "") ||
     path.basename(root);
-  const team = slugify(config.team || "default");
+  const visibility = ["team", "organization"].includes(metadata.visibility)
+    ? metadata.visibility
+    : "team";
+  const lifecycle = metadata.lifecycle === "candidate" ? "inbox" : "knowledge";
+  const team = slugify(metadata.team || config.team || "default");
   const member = slugify(config.member || "unknown");
+  const namespace =
+    visibility === "team" ? [visibility, team] : [visibility];
   const destination = path.join(
     sharedRoot,
-    "commits",
-    team,
+    lifecycle,
+    ...namespace,
     slugify(workspace),
     date,
     `${member}-${slugify(id)}-${path.basename(commitPath)}`,
@@ -1180,7 +1283,6 @@ Maintain searchable metadata in the SESSION.md Metadata section:
 - Entities: exact product, project, customer, system, or policy names
 - Sensitivity: private, public, internal, confidential, or restricted
 - Confidence: confirmed, working, or uncertain
-- Status: active, superseded, or archived
 
 Do not record credentials, secrets, unnecessary personal data, or the full raw
 conversation.
@@ -1191,9 +1293,12 @@ After the result is validated, run:
 
 \`context-commit end --summary "<plain-language outcome>" --reuse-when "<when this context helps again>"\`
 
-This saves a visible, dated Markdown Prompt Commit in \`context-memory/\` and,
-when configured, copies it to the shared company memory. Do not create a Prompt
-Commit for a trivial exchange or work with no reusable outcome.
+This saves a visible, dated Markdown Prompt Commit in \`context-memory/\`.
+ContextCommit then evaluates the Outcome Diff, reusable causal context,
+validation, and sensitivity. Personal work stays local; reusable work becomes a
+team or organization candidate; validated low-risk work is published by the
+workspace promotion policy. Do not create a Prompt Commit for a trivial
+exchange or work with no reusable outcome.
 
 SessionEnd hooks provide a deterministic fallback: they finalize a meaningful
 active session, or discard it when no files or reusable context changed.
@@ -1280,7 +1385,6 @@ Topics: <!-- 1-5 stable, specific nouns, comma-separated -->
 Entities: <!-- Exact product, project, customer, system, or policy names -->
 Sensitivity: <!-- private | public | internal | confidential | restricted -->
 Confidence: <!-- confirmed | working | uncertain -->
-Status: active
 `;
   await writeFile(path.join(metaDir, SESSION_FILE), content);
 }
@@ -1325,6 +1429,9 @@ function buildCommitMetadata({
   sessionDraft,
   session,
   config,
+  changes,
+  outcome,
+  reuseWhen,
 }) {
   const metadataSection = cleanDraftSection(sessionDraft.Metadata);
   const topics = normalizeMetadataList(
@@ -1349,19 +1456,66 @@ function buildCommitMetadata({
     ["confirmed", "working", "uncertain"],
     grouped.validation.length > 0 ? "confirmed" : "working",
   );
-  const status = normalizeChoice(
-    options.status || metadataField(metadataSection, "Status"),
-    ["active", "superseded", "archived"],
-    "active",
+  const causalNotes = [
+    ...grouped.context,
+    ...grouped.decision,
+    ...grouped.constraint,
+    ...grouped.feedback,
+    ...grouped.prompt,
+  ];
+  const hasOutcomeDiff =
+    changes.length > 0 ||
+    Boolean(outcome) ||
+    grouped.decision.length > 0 ||
+    grouped.constraint.length > 0;
+  const reusable = Boolean(String(reuseWhen || "").trim());
+  const safeToShare = ["public", "internal"].includes(sensitivity);
+  const validated = grouped.validation.length > 0 && confidence === "confirmed";
+  const promotionTarget = normalizeChoice(
+    config.promotionTarget,
+    ["team", "organization"],
+    "team",
   );
+  let visibility = "personal";
+  let lifecycle = "published";
+  let promotionReason = "kept local: no shared reusable outcome";
+
+  if (
+    config.sharedMemoryDir &&
+    hasOutcomeDiff &&
+    causalNotes.length > 0 &&
+    reusable &&
+    safeToShare
+  ) {
+    visibility = promotionTarget;
+    if (validated) {
+      lifecycle = "published";
+      promotionReason =
+        "auto-published: reusable Outcome Diff with causal context and validation";
+    } else {
+      lifecycle = "candidate";
+      promotionReason =
+        "shared as candidate: reusable Outcome Diff needs validation";
+    }
+  } else if (!safeToShare && config.sharedMemoryDir) {
+    promotionReason = `kept local: sensitivity is ${sensitivity}`;
+  } else if (!hasOutcomeDiff) {
+    promotionReason = "discarded: no reusable Outcome Diff";
+  } else if (causalNotes.length === 0) {
+    promotionReason = "kept local: no causal context was captured";
+  }
   return {
-    scope: config.sharedMemoryDir ? "team" : "personal",
+    save: hasOutcomeDiff,
+    visibility,
+    lifecycle,
+    ownerRole: config.team || "default",
+    promotionPolicy: config.promotionPolicy || "outcome-diff-v1",
+    promotionReason,
     topics,
     entities,
     contextTypes: [...new Set(contextTypes)],
     sensitivity,
     confidence,
-    status,
   };
 }
 
@@ -1426,12 +1580,23 @@ function resolveSharedMemoryDir(root, config) {
     : path.resolve(root, config.sharedMemoryDir);
 }
 
-function resolveSharedReadDir(root, config) {
-  return path.join(
-    resolveSharedMemoryDir(root, config),
-    "commits",
-    slugify(config.team || "default"),
-  );
+function resolveSharedReadDirs(root, config) {
+  const sharedRoot = resolveSharedMemoryDir(root, config);
+  return [
+    {
+      label: "team",
+      dir: path.join(
+        sharedRoot,
+        "knowledge",
+        "team",
+        slugify(config.team || "default"),
+      ),
+    },
+    {
+      label: "organization",
+      dir: path.join(sharedRoot, "knowledge", "organization"),
+    },
+  ];
 }
 
 function parseArgs(args) {
@@ -1510,12 +1675,19 @@ function parseFrontmatter(content) {
     reuseWhen: scalar("reuse_when"),
     freshUntil: scalar("fresh_until"),
     endedAt: scalar("ended_at"),
-    scope: scalar("scope"),
+    visibility: scalar("visibility") || scalar("scope") || "personal",
+    lifecycle:
+      scalar("lifecycle") ||
+      (["superseded", "archived"].includes(scalar("status"))
+        ? scalar("status")
+        : "published"),
     team: scalar("team"),
     member: scalar("member"),
+    ownerRole: scalar("owner_role"),
+    promotionPolicy: scalar("promotion_policy"),
+    promotionReason: scalar("promotion_reason"),
     sensitivity: scalar("sensitivity"),
     confidence: scalar("confidence"),
-    status: scalar("status") || "active",
     topics: list("topics"),
     entities: list("entities"),
     contextTypes: list("context_types"),
@@ -1537,6 +1709,7 @@ function renderContextCard(content, source, maxLength) {
       : `fresh until ${metadata.freshUntil.slice(0, 10)}`
     : "freshness not recorded";
   const labels = [
+    metadata.visibility ? `visibility: ${metadata.visibility}` : "",
     metadata.topics.length > 0 ? `topics: ${metadata.topics.join(", ")}` : "",
     metadata.entities.length > 0
       ? `entities: ${metadata.entities.join(", ")}`
@@ -1569,9 +1742,18 @@ async function resolveContextReference(root, config, reference) {
     local: resolveMemoryDir(root, config),
   };
   if (config.sharedMemoryDir) {
-    sources.shared = resolveSharedReadDir(root, config);
+    for (const source of resolveSharedReadDirs(root, config)) {
+      sources[source.label] = source.dir;
+    }
+    sources.shared = path.join(
+      resolveSharedMemoryDir(root, config),
+      "commits",
+      slugify(config.team || "default"),
+    );
   }
-  const sourceMatch = reference.match(/^(local|shared):(.*)$/);
+  const sourceMatch = reference.match(
+    /^(local|shared|team|organization):(.*)$/,
+  );
   if (sourceMatch) {
     const base = sources[sourceMatch[1]];
     if (!base) throw new Error(`The ${sourceMatch[1]} memory source is unavailable.`);
@@ -1723,6 +1905,7 @@ Usage:
   context-commit init [--memory-dir PATH] [--shared PATH]
                       [--shared-memory-dir PATH]
                       [--team NAME] [--member NAME]
+                      [--promotion-target team|organization]
                       [--agent generic|codex|claude|all] [--no-hooks]
   context-commit start [--goal "Current task"]
   context-commit note [--type TYPE] "Meaningful context"
@@ -1733,6 +1916,7 @@ Usage:
   context-commit show "<source>" [--section details|diff|all]
   context-commit hooks install|status [--agent codex|claude|all]
   context-commit sync [--force]
+  context-commit sources [--home PATH] [--dir PATH]
   context-commit status
   context-commit abandon --yes
 
