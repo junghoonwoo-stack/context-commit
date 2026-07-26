@@ -866,7 +866,11 @@ ${renderNotes(grouped.skill_diff)}
 
 ## Outcome Evidence
 
-${outcomeParts.join("\n\n")}
+${outcomeParts.join("\n\n")}${
+  grouped.validation.length > 0
+    ? `\n\nValidation:\n${renderNotes(grouped.validation)}`
+    : ""
+}
 
 ## Context That Mattered
 
