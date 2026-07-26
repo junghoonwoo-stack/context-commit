@@ -4,16 +4,16 @@
 
 **Title**
 
-Show HN: ContextCommit – visible, editable memory for Codex and Claude Code
+Show HN: ContextCommit – promote Agent work into organization memory
 
 **Post**
 
 AI coding agents are good at finishing a task, but the context that made the
 result correct often disappears with the session.
 
-I built ContextCommit, an Apache 2.0 local-first layer that saves meaningful
-session outcomes as dated Markdown and gives relevant context to the next
-session.
+I built ContextCommit, an Apache 2.0 local-first layer that detects reusable
+Outcome Diffs in individual Agent work and promotes them into team or
+organization memory.
 
 It does not call an LLM or require an API key. It runs on top of Codex or Claude
 Code.
@@ -21,6 +21,10 @@ Code.
 The memory harness is visible in AGENTS.md and CLAUDE.md, applies across every
 Skill in the workspace, and uses lifecycle hooks for automatic start, context
 injection, and finalization.
+
+Its `outcome-diff-v1` policy automatically discards noise, keeps personal or
+sensitive context local, routes unvalidated reusable work to an Inbox, and
+publishes only validated low-risk context for other Agents.
 
 It also uses progressive disclosure: the Agent first sees a small context
 index, opens full details only when needed, and loads artifact diffs only when
@@ -52,10 +56,9 @@ and lifecycle hook experience.
 Git preserves what changed. ContextCommit preserves the context that made it
 change.
 
-ContextCommit is an Apache 2.0, local-first memory layer for Codex and Claude
-Code. It saves meaningful AI work outcomes as dated Markdown, applies across
-all Skills through AGENTS.md/CLAUDE.md, and uses lifecycle hooks to make the
-memory loop automatic.
+ContextCommit is an Apache 2.0, local-first promotion layer for Agent memory. It
+turns reusable Outcome Diffs from individual work into governed team or
+organization context through a visible Markdown policy.
 
 The new progressive-disclosure flow loads only a compact index first. Full
 details and artifact diffs stay on disk and are opened only when needed.
