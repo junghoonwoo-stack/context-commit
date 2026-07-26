@@ -164,15 +164,15 @@ details.
 ## What appears in the folder
 
 ```text
-billing-service/
+customer-research/
 ├── AGENTS.md
 ├── CLAUDE.md
-├── src/
-├── test/
+├── interview-notes.md
+├── executive-brief.md
 ├── context-memory/
 │   ├── INDEX.md
 │   └── 2026-07-25/
-│       └── 10-42-18-made-payment-webhooks-idempotent.md
+│       └── 10-42-18-adapted-interview-summary-for-executives.md
 ├── .context-commit/
 │   ├── config.json
 │   ├── CURRENT_CONTEXT.md
@@ -283,28 +283,34 @@ reusable conditional change to a shared Skill.
 
 ## What `CURRENT_CONTEXT.md` looks like
 
-At the start of the next task, ContextCommit selects relevant Prompt Commits and
-creates lightweight cards:
+At the start of the next task, ContextCommit selects relevant published Skill
+Diffs and creates lightweight cards:
 
 ```markdown
 # Current Context
 
-Goal: Add support for refund webhooks
+Goal: Summarize a customer interview for executive review
 
-## Made payment webhooks idempotent by event ID
+## Adapted interview summaries for executives
 
-- Source: `local:2026-07-25/10-42-18-made-webhooks-idempotent.md`
-- Metadata: topics: payments, webhooks, idempotency ·
+- Source: `organization:customer-research/2026-07-26/adapted-interview-summary.md`
+- Metadata: topics: customer research, executive brief ·
   confidence: confirmed · sensitivity: internal
-- Reuse when: Implementing or reviewing payment webhook handlers.
-- Details: `context-commit show "local:2026-07-25/10-42-18-made-webhooks-idempotent.md"`
-- Artifact diff: `context-commit show "local:2026-07-25/10-42-18-made-webhooks-idempotent.md" --section diff`
+- Reuse when: Summarizing customer interviews for executives.
+- Details: `context-commit show "organization:customer-research/2026-07-26/adapted-interview-summary.md"`
 
-### Decisions
+### Skill Diff
 
-- Use the provider's stable event ID as the idempotency key.
-- Preserve compatibility for legacy records and the current API contract.
+- Condition: audience = executive
+- Lead with revenue, cost, churn, and the decision needed.
+- Compress detailed feature requests.
+
+### Outcome Evidence
+
+- The PM approved the final executive brief.
 ```
+
+Only the compact card enters the active context first.
 
 Only the compact card enters the active context first. The complete Prompt
 Commit and exact file diff stay on disk and are opened only when needed:
@@ -616,15 +622,15 @@ context-commit end --summary "임원용 요약 로직 적용" \
 ## 생성되는 폴더와 파일
 
 ```text
-billing-service/
+customer-research/
 ├── AGENTS.md
 ├── CLAUDE.md
-├── src/
-├── test/
+├── interview-notes.md
+├── executive-brief.md
 ├── context-memory/
 │   ├── INDEX.md
 │   └── 2026-07-25/
-│       └── 10-42-18-결제-webhook-멱등성-확보.md
+│       └── 10-42-18-임원용-인터뷰-요약-로직.md
 ├── .context-commit/
 │   ├── config.json
 │   ├── CURRENT_CONTEXT.md
@@ -734,28 +740,34 @@ Confidence: confirmed
 
 ## `CURRENT_CONTEXT.md` 사례
 
-다음 업무가 시작되면 ContextCommit은 관련 Prompt Commit을 찾아 작은
+다음 업무가 시작되면 ContextCommit은 관련 Published Skill Diff를 찾아 작은
 카드로 취합합니다.
 
 ```markdown
 # Current Context
 
-Goal: Refund Webhook 지원 추가
+Goal: 고객 인터뷰 임원 보고용 요약
 
-## Event ID 기반으로 결제 Webhook 멱등성 확보
+## 임원용 인터뷰 요약 로직
 
-- Source: `local:2026-07-25/10-42-18-webhook-멱등성-확보.md`
-- Metadata: topics: payments, webhooks, idempotency ·
+- Source: `organization:customer-research/2026-07-26/임원용-인터뷰-요약.md`
+- Metadata: topics: 고객 조사, 임원 보고 ·
   confidence: confirmed · sensitivity: internal
-- Reuse when: 결제 Webhook Handler를 구현하거나 Review할 때
-- Details: `context-commit show "local:2026-07-25/10-42-18-webhook-멱등성-확보.md"`
-- Artifact diff: `context-commit show "local:2026-07-25/10-42-18-webhook-멱등성-확보.md" --section diff`
+- Reuse when: 고객 인터뷰를 임원 보고용으로 요약할 때
+- Details: `context-commit show "organization:customer-research/2026-07-26/임원용-인터뷰-요약.md"`
 
-### Decisions
+### Skill Diff
 
-- 결제사가 제공하는 안정적인 Event ID를 멱등성 Key로 사용함.
-- 기존 레코드와 현재 공개 API 계약의 호환성을 유지함.
+- Condition: audience = executive
+- 매출·비용·이탈 영향과 필요한 의사결정을 먼저 제시
+- 세부 기능 요청은 축약
+
+### Outcome Evidence
+
+- PM이 최종 임원 보고용 요약을 승인함.
 ```
+
+처음에는 이 작은 카드만 Agent의 활성 Context에 들어갑니다.
 
 처음에는 이 작은 카드만 Agent의 활성 Context에 들어갑니다. 전체 Prompt
 Commit과 실제 파일 Diff는 디스크에 보존되며 필요할 때만 엽니다.
