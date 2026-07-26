@@ -867,7 +867,7 @@ context-commit init --shared "/Volumes/Company Context"
 저장한 뒤 `skill-diff-v1` 정책을 자동 적용합니다.
 
 - 재사용할 Skill Diff가 없음 → 저장하지 않음
-- 개인적이거나 민감하거나 재사용성이 낮음 → Local에만 저장
+- Skill Diff 없는 결과 근거 또는 개인적·민감한 Context → Local에만 저장
 - 재사용 가능하지만 검증되지 않음 → 공유 `inbox/`
 - 재사용 가능하고 검증된 저위험 Context → 공유 `knowledge/`
 
