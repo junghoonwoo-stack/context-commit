@@ -1,71 +1,73 @@
 # Organization memory
 
-ContextCommit's core job is not session storage. It turns tacit knowledge that
-appears during individual Agent work into reusable organization memory.
+ContextCommit's core job is not session storage. It captures reusable **Skill
+Diffs** discovered in individual Agent work and promotes them into organization
+memory.
 
-A standard Skill captures the known way of working. Real execution adds current
-facts, corrections, exceptions, and decisions. Those deltas often remain with
-the person who produced the latest result, which is why teams search for the
-right owner and lose context when people move or leave.
-
-ContextCommit makes collection, promotion, distribution, and application part
-of the Agent workflow.
+A standard Skill contains the known workflow. Real work introduces new
+conditions, exceptions, priorities, and decisions. These changes are already
+expressed in prompts because a person needs a better result. Without a capture
+loop, they remain with that person—which is why teams search for the right owner
+and lose knowledge when people move or leave.
 
 ## Minimal promotion pipeline
 
 ```mermaid
 flowchart TD
     A["Standard Skill"] --> B["Individual Agent work"]
-    B --> C["Outcome Diff + causal context"]
-    C --> D{"Workspace policy"}
-    D -->|Personal| E["Local memory"]
-    D -->|Candidate| F["Shared inbox"]
-    D -->|Published| G["Organization knowledge"]
-    F --> G
-    G --> B
+    B --> C["New condition or correction"]
+    C --> D["Skill Diff + Outcome Evidence"]
+    D --> E{"Workspace policy"}
+    E -->|Personal| F["Local memory"]
+    E -->|Candidate| G["Shared inbox"]
+    E -->|Published| H["Organization Skill memory"]
+    G --> H
+    H --> B
 ```
 
-The built-in `outcome-diff-v1` policy uses signals already visible in the work:
+The built-in `skill-diff-v1` policy uses signals already visible in the work:
 
-- a changed artifact or an explicit decision/constraint
-- causal context such as a fact, correction, or rejected approach
+- the Base Skill or workflow
+- a condition that changed its logic
+- a step, exception, priority, or decision rule added, changed, or removed
 - a concrete `Reuse When`
-- validation evidence
+- outcome evidence and validation
 - sensitivity classification
 
 No separate model, API, database, or per-session sharing prompt is required.
-The user does the work; the policy handles the knowledge lifecycle.
+The Agent records the Skill Diff as part of the work; workspace policy handles
+its lifecycle.
 
 ## Automatic routing
 
 | Result | Location | Loaded by other Agents? |
 | --- | --- | --- |
-| No reusable Outcome Diff | Discarded | No |
-| Personal or sensitive context | Local `context-memory/` | No |
+| No reusable Skill Diff or outcome evidence | Discarded | No |
+| Personal or sensitive change | Local `context-memory/` | No |
 | Reusable but not validated | Shared `inbox/` | No |
-| Reusable, validated, low-risk context | Shared `knowledge/` | Yes |
+| Reusable, validated, low-risk Skill Diff | Shared `knowledge/` | Yes |
 
-`internal` and `public` items may be promoted. `private`, `confidential`, and
-`restricted` items stay local. This metadata is a routing guard, not a security
-boundary; storage permissions still control access.
+`internal` and `public` items may be promoted. `private`, `confidential`,
+and `restricted` items stay local. This metadata is a routing guard, not a
+security boundary; storage permissions still control access.
 
 ## Workspace policy
 
 A shared path defaults to team promotion:
 
 ```bash
-context-commit init --shared "/mounted/company-context" --team "payments"
+context-commit init --shared "/mounted/company-context" --team "research"
 ```
 
-An administrator can configure a workspace for organization-wide promotion:
+An administrator can configure organization-wide promotion:
 
 ```bash
 context-commit init --shared "/mounted/company-context" \
   --team "platform" --promotion-target organization
 ```
 
-This keeps the decision out of each person's end-of-session workflow. Team and
-organization scope are workspace policy.
+Team and organization scope are workspace policy, not a decision each person
+must make after every session.
 
 ## Directory layout
 
@@ -81,7 +83,7 @@ company-context/
 
 Only `knowledge/team/<current-team>/` and `knowledge/organization/` are
 retrieved. Inbox candidates remain inspectable evidence but do not silently
-shape another person's Agent.
+change another person's Agent.
 
 ## Storage
 
@@ -99,10 +101,12 @@ access boundaries; metadata is not access control.
 
 1. Set the promotion target and allowed sensitivity classes centrally.
 2. Assign ownership to a team or role, not only a person.
-3. Review Inbox candidates and false promotions during the pilot.
-4. Define how published knowledge is superseded or expired.
-5. Keep raw Agent sessions local; share only extracted Prompt Commits.
+3. Review Inbox candidates, duplicate conditions, and false promotions.
+4. Merge repeated Skill Diffs into a simpler shared rule instead of growing an
+   unbounded IF–ELSE list.
+5. Define how published rules are superseded or expired.
+6. Keep raw Agent sessions local; share only extracted Prompt Commits.
 
-The v0.5 pipeline deliberately stops at trustworthy published Prompt Commits.
-Compiling many commits into canonical topic pages can be added later without
-turning the first version into a full knowledge-management platform.
+The v0.6 pipeline stops at trustworthy published Skill Diffs. Compiling many
+commits into a canonical `SKILL.md` can be added later without turning the
+first version into a full knowledge-management platform.
